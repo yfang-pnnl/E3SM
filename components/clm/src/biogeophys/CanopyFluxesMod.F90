@@ -148,6 +148,7 @@ contains
     real(r8), parameter :: dlemin = 0.1_r8  ! max limit for energy flux convergence [w/m2]
     real(r8), parameter :: dtmin = 0.01_r8  ! max limit for temperature convergence [K]
     integer , parameter :: itmax = 40       ! maximum number of iteration [-]
+!    integer , parameter :: itmax = 4       ! maximum number of iteration [-]
     integer , parameter :: itmin = 2        ! minimum number of iteration [-]
     real(r8), parameter :: irrig_min_lai = 0.0_r8           ! Minimum LAI for irrigation
     real(r8), parameter :: irrig_btran_thresh = 0.999999_r8 ! Irrigate when btran falls below 0.999999 rather than 1 to allow for round-off error
@@ -573,7 +574,7 @@ contains
       ! --------------------------------------------------------------------------
       
       if(use_fates)then
-         call alm_fates%wrap_btran(bounds, fn, filterc_tmp(1:fn), soilstate_vars, waterstate_vars, &
+         call alm_fates%wrap_btran(bounds, fn, filterc_tmp(1:fn), soilstate_vars, &
                temperature_vars, energyflux_vars, soil_water_retention_curve)
          
       else
@@ -1237,7 +1238,7 @@ contains
       if ( use_fates ) then
          call alm_fates%wrap_accumulatefluxes(bounds,fn,filterp(1:fn))
          call alm_fates%wrap_hydraulics_drive(bounds,fn,filterp(1:fn),soilstate_vars, &
-               waterstate_vars,waterflux_vars,solarabs_vars,energyflux_vars)
+               solarabs_vars,energyflux_vars)
 
       else
 

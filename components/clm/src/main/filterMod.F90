@@ -18,6 +18,7 @@ module filterMod
   use LandunitType   , only : lun_pp                
   use ColumnType     , only : col_pp                
   use VegetationType      , only : veg_pp                
+  use spmdMod                         
   !
   ! !PUBLIC TYPES:
   implicit none
@@ -386,6 +387,8 @@ contains
        end if
     end do
     this_filter(nc)%num_hydrologyc = f
+!Fang
+!    if (masterproc) print *,'num_hydrologc-',f
     this_filter(nc)%num_hydrononsoic = fn
 
     ! Create prognostic crop and soil w/o prog. crop filters at pft-level

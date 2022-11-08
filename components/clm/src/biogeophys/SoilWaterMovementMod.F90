@@ -26,6 +26,8 @@ module SoilWaterMovementMod
   ! !PRIVATE DATA MEMBERS:
   integer, parameter, public :: zengdecker_2009 = 0
   integer, parameter, public :: vsfm = 1
+  integer, parameter, public :: parflow = 2
+
   integer, public :: soilroot_water_method     !0: use the Zeng and deck method, this will be readin from namelist in the future
 
   !-----------------------------------------------------------------------
@@ -39,6 +41,7 @@ contains
     !specify method for doing soil&root water interactions
     !
     use clm_varctl, only : use_vsfm, use_var_soil_thick, use_hydrstress
+    use clm_varctl, only : use_parflow_via_emi
     use spmdMod,    only : mpicom, MPI_LOGICAL
     use shr_sys_mod,only : shr_sys_abort
     ! !ARGUMENTS:
@@ -52,7 +55,11 @@ contains
     ! GB-FIX-ME: The call to control_spmd() [in subroutine control_init()] before
     !            call to init_hydrology() would avoid the mpi broadcast
     call mpi_bcast (use_vsfm, 1, MPI_LOGICAL, 0, mpicom, ier)
+    call mpi_bcast (use_parflow_via_emi, 1, MPI_LOGICAL, 0, mpicom, ier)
+
     if (use_vsfm) soilroot_water_method = vsfm
+
+    if (use_parflow_via_emi) soilroot_water_method = parflow
 
     call mpi_bcast (use_var_soil_thick, 1, MPI_LOGICAL, 0, mpicom, ier)
     if (use_var_soil_thick .and. soilroot_water_method .eq. zengdecker_2009) then
@@ -88,7 +95,9 @@ contains
     use clm_varcon                 , only : denh2o, denice, watmin
     use ColumnType                 , only : col_pp
     use ExternalModelConstants     , only : EM_VSFM_SOIL_HYDRO_STAGE
+    use ExternalModelConstants     , only : EM_PARFLOW_SOIL_HYDRO_STAGE
     use ExternalModelConstants     , only : EM_ID_VSFM
+    use ExternalModelConstants     , only : EM_ID_PARFLOW
     use ExternalModelInterfaceMod  , only : EMI_Driver
     use clm_time_manager           , only : get_step_size, get_nstep
     !
@@ -148,6 +157,23 @@ contains
             waterflux_vars=waterflux_vars, waterstate_vars=waterstate_vars, &
             temperature_vars=temperature_vars)
 #endif
+    case (parflow)
+#ifdef USE_PETSC_LIB
+
+       call Prepare_Data_for_EM_VSFM_Driver(bounds, num_hydrologyc,filter_hydrologyc, &
+            soilhydrology_vars, soilstate_vars, &
+            waterflux_vars, waterstate_vars, temperature_vars)
+
+       call EMI_Driver(EM_ID_PARFLOW, EM_PARFLOW_SOIL_HYDRO_STAGE, dt =get_step_size()*1.0_r8, &
+            number_step = get_nstep(), &
+            clump_rank  = bounds%clump_index, &
+            num_hydrologyc=num_hydrologyc, filter_hydrologyc=filter_hydrologyc,&
+            soilhydrology_vars=soilhydrology_vars,soilstate_vars=soilstate_vars, &
+            waterflux_vars=waterflux_vars, waterstate_vars=waterstate_vars, &
+            temperature_vars=temperature_vars)
+#endif
+
+
     case default
 
        call endrun(subname // ':: a SoilWater implementation must be specified!')          
@@ -878,6 +904,7 @@ contains
     use landunit_varcon           , only : istsoil, istcrop
     use clm_varctl                , only : lateral_connectivity
     use domainLateralMod          , only : ldomain_lateral
+    use clm_varctl                , only : use_parflow_via_emi
     !
     ! !ARGUMENTS:
     implicit none
@@ -903,6 +930,8 @@ contains
     real(r8)             :: z_up, z_dn                    ! [m]
     real(r8)             :: qflx_drain_layer              ! Drainage flux from a soil layer (mm H2O/s)
     real(r8)             :: qflx_drain_tot                ! Cummulative drainage flux from soil layers within a column (mm H2O/s)
+    real(r8) :: vwc_liq(bounds%begc:bounds%endc,1:nlevgrnd+1) ! liquid volumetric water content
+    integer  :: nlevbed                                               ! number of layers to bedrock
 
     !-----------------------------------------------------------------------
 
@@ -910,6 +939,7 @@ contains
          zi                        =>    col_pp%zi                                     , & ! Input:  [real(r8) (:,:) ]  interface level below a "z" level (m)
          dz                        =>    col_pp%dz                                     , & ! Input:  [real(r8) (:,:) ]  layer thickness (m)
          snl                       =>    col_pp%snl                                    , & ! Input:  [integer  (:)   ]  minus number of snow layers
+         nlev2bed                  =>    col_pp%nlevbed                           , & ! Input:  [integer  (:)   ]  number of layers to bedrock                     
 
          zwt                       =>    soilhydrology_vars%zwt_col                 , & ! Input:  [real(r8) (:)   ]  water table depth (m)
 
@@ -933,6 +963,7 @@ contains
          qflx_dew_grnd             =>    col_wf%qflx_dew_grnd           , & ! Input:  [real(r8) (:)   ]  ground surface dew formation (mm H2O /s) [+]
          qflx_sub_snow             =>    col_wf%qflx_sub_snow           , & ! Input:  [real(r8) (:)   ]  ground surface dew formation (mm H2O /s) [+]
          qflx_drain                =>    col_wf%qflx_drain              , & ! Input:  [real(r8) (:)   ]  sub-surface runoff (mm H2O /s)
+         qflx_drain_mp             =>    col_wf%qflx_drain_mp           , & ! Input:  [real(r8) (:)   ]  sub-surface runoff from macropore (mm H2O /s)
 
          mflx_infl_col             =>    col_wf%mflx_infl               , & ! Output: [real(r8) (:)   ]  infiltration source in top soil control volume (kg H2O /s)
          mflx_dew_col              =>    col_wf%mflx_dew                , & ! Output: [real(r8) (:)   ]  (liquid+snow) dew source in top soil control volume (kg H2O /s)
@@ -949,6 +980,13 @@ contains
       ! Get time step
 
       dtime = get_step_size()
+
+      do fc = 1, num_hydrologyc
+        c = filter_hydrologyc(fc)
+        do j = 1, nlevgrnd
+            vwc_liq(c,j) = max(h2osoi_liq(c,j),1.0e-6_r8)/(dz(c,j)*denh2o)
+         end do
+      end do
 
       mflx_infl_col(:)              = 0.d0
       mflx_dew_col(:)               = 0.d0
@@ -969,8 +1007,13 @@ contains
          endif
 #endif
 
-         ! [mm/s] --> [kg/s]   [m^2] [kg/m^3]  [m/mm]
-         flux_unit_conversion     = area * denh2o * 1.0d-3
+!         if (use_parflow_via_emi) then
+            ! [mm/s] --> 
+!            flux_unit_conversion = 1.d0 
+!         else
+            ! [mm/s] --> [kg/s]   [m^2] [kg/m^3]  [m/mm]
+            flux_unit_conversion     = area * denh2o * 1.0d-3
+!         end if
 
          do j = 1, nlevsoi
             ! ET sink
@@ -990,8 +1033,9 @@ contains
                                      (1._r8 - frac_h2osfc(c))*  &
                                       flux_unit_conversion
          end if
-
-         if (qflx_drain(c) > 0.d0) then
+!#if 0
+         if( .not. use_parflow_via_emi ) then
+           if (qflx_drain(c) > 0.d0) then
 
             ! Find soil layer just above water table
             jwt = nlevgrnd
@@ -1026,15 +1070,51 @@ contains
 
                mflx_drain_col(c,j) = -qflx_drain_layer*flux_unit_conversion
 
-           end do
-           qflx_drain(c) = qflx_drain_tot
+            end do
+            qflx_drain(c) = qflx_drain_tot
 
-         endif
+           endif
+         else
+!#endif
+           qflx_drain(c) = 0.d0
+            ! Find soil layer just above water table
+            jwt = nlevgrnd
+
+            ! allow jwt to equal zero when zwt is in top layer
+            do j = nlevgrnd,1,-1
+               if (vwc_liq(c,j) >= watsat(c,j)) then
+                  jwt = j-1
+               else
+                  exit
+               end if
+            enddo
+
+            ! Now ensure the soil layer index corresponding to the water table
+            ! is greater than or equal to the first soil layer.
+            jwt = max(jwt,1)
+
+            dzsum = 0.d0
+            do j = jwt, nlevgrnd
+               dzsum = dzsum + dz(c,j)
+            end do
+
+            do j = jwt, nlevgrnd
+               qflx_drain_layer = qflx_drain_mp(c) * dz(c,j)/dzsum
+               mflx_drain_col(c,j) = qflx_drain_layer*flux_unit_conversion !source to the bottom layers
+            end do
+!#if 0
+         end if    
+!#endif
 
          ! The mass flux associated with disapperance of snow layer over the
          ! last time step.
          mflx_snowlyr_disp_col(c) = mflx_snowlyr_col(c)*area + &
                                     mflx_neg_snow_col_1d(c-bounds%begc+1)*area
+         if( use_parflow_via_emi ) then
+           !mm/s
+           mflx_snowlyr_disp_col(c) = mflx_snowlyr_disp_col(c)/area/denh2o/1d-3
+         end if
+        
          mflx_snowlyr_col(c) = 0._r8
 
       end do

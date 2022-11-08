@@ -749,7 +749,8 @@ contains
     call ncd_io(ncid=ncid, varname='PCT_GLACIER', flag='read', data=pctgla, &
          dim1name=grlnd, readvar=readvar)
     if (.not. readvar) call endrun( msg=' ERROR: PCT_GLACIER NOT on surfdata file'//errMsg(__FILE__, __LINE__))
-
+!Fang 
+!    nlevurb = 0
     ! Read urban info
     if (nlevurb == 0) then
       ! If PCT_URBAN is not multi-density then set pcturb to zero 
@@ -832,7 +833,15 @@ contains
     end if
 
     ! Determine wt_lunit for special landunits
-
+!Fang
+#if 0
+    pctlak = 0.d0
+    pctwet = 0.d0
+    pctgla = 0.d0
+    pctglc_mec_tot = 0.d0
+    pcturb = 0.d0
+#endif
+!Fang
     do nl = begg,endg
 
        wt_lunit(nl,istdlak)     = pctlak(nl)/100._r8

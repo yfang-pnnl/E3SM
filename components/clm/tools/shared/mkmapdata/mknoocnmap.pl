@@ -258,8 +258,9 @@ if ( $printlev > 0 ) {
 # land grid...
 my $grddir  = absolute_path( "$scrdir/../mkmapgrids" );
 my $grid1   = "$grddir/SCRIPgrid_${name}_nomask_c${cdate}.nc";
+#Fang
 my $cmdenv  = "env S_LAT=$S_lat W_LON=$W_lon N_LAT=$N_lat E_LON=$E_lon " . 
-             "NX=$nx NY=$ny PTNAME=$name $print ";
+             "NX=$nx NY=$ny IMASK=1 PTNAME=$name $print ";
 
 chdir( "$grddir" );
 my $cmd     = "$cmdenv GRIDFILE=$grid1 ncl mkscripgrid.ncl";
@@ -272,6 +273,7 @@ system( $cmd );
 # ocean grid...
 my $grid2 = "$grddir/SCRIPgrid_${name}_noocean_c${cdate}.nc";
 my $cmd    = "$cmdenv GRIDFILE=$grid2 IMASK=0 ncl mkscripgrid.ncl";
+#my $cmd    = "$cmdenv GRIDFILE=$grid2 IMASK=1 ncl mkscripgrid.ncl";
 if ( $printlev > 0 ) {
    print "Create ocean SCRIP gridfile\n";
    print "Execute: $cmd\n";

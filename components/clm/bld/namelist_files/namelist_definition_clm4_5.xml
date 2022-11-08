@@ -306,6 +306,11 @@ Toggle to turn on the logging module (only relevant if FATES is being used).
 Toggle to turn on plant hydraulics(only relevant if FATES is on).
 </entry>
 
+<entry id="use_fates_macropore" type="logical" category="physics"
+        group="clm_inparm" valid_values="" value=".false.">
+Toggle to turn on macropore flow(only relevant if FATES is on).
+</entry>
+
 <entry id="use_fates_ed_st3" type="logical" category="physics"
         group="clm_inparm" valid_values="" value=".false.">
 Toggle to turn on Static Stand Structure Mode (only relevant if FATES is being used).
@@ -510,6 +515,12 @@ number of segments per clump for decomposition
 <entry id="pertlim" type="real" category="clm_physics"
        group="clm_inparm" valid_values="" >
 Perturbation limit when doing error growth test
+</entry>
+
+<entry id="outnc_large_files" type="logical" category="clm"
+       group="clm_inparm" valid_values="" >
+on to output NetCDF files in large-file format
+<default>Default: TRUE</default>
 </entry>
 
 <entry id="rest_flag" type="logical" category="clm_restart"
@@ -1740,6 +1751,26 @@ Specifies the method for decomposing CLM grids across processors.
     group="clm_pflotran_inparm" valid_values="" >
     pflotran file prefix.
 </entry>
+
+<entry id="parflow_inputdir" type="char*256" category="clm_parflow"
+    group="clm_parflow_inparm" valid_values="" >
+    pflotran input directory in which $parflow_prefix.pfidb and files contained should be located, but not yet done.
+</entry>
+
+<entry id="parflow_prefix" type="char*256" category="clm_parflow"
+    group="clm_parflow_inparm" valid_values="" >
+    parflow file prefix.
+</entry>
+<entry id="pf_elm_mapfile" type="char*256" category="clm_parflow"
+    group="clm_parflow_inparm" valid_values="" >
+    parflow elm file containing the elm-parflow grid mapping.
+</entry>
+
+<entry id="use_parflow_via_emi" type="logical" category="default_settings"
+    group="clm_inparm" valid_values="">
+    Runtime flag to turn on/off PARFLOW via EMI.
+</entry>
+
 
 <!-- ========================================================================================  -->
 <!-- Namelist options related to Variably Saturated Flow Model (VSFM)                          -->

@@ -600,7 +600,7 @@ ifndef SLIBS
   ifeq ($(NETCDF_SEPARATE), FALSE)
     SLIBS := -L$(LIB_NETCDF) -lnetcdff -lnetcdf
   else ifeq ($(NETCDF_SEPARATE), TRUE)
-    SLIBS := -L$(LIB_NETCDF_FORTRAN) -L$(LIB_NETCDF_C) -lnetcdff -lnetcdf
+    SLIBS := -L$(LIB_NETCDF_FORTRAN) -L$(LIB_NETCDF_C) -lnetcdff -lnetcdf 
   endif
 endif
 

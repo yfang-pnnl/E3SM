@@ -215,7 +215,7 @@
       <value stream="CLM1PT.1x1">$DIN_LOC_ROOT/atm/datm7/domain.clm</value>
       <value stream="CLM1PT.CLM_USRDAT">$ATM_DOMAIN_PATH</value>
       <value stream="CPLHISTForcing">null</value>
-      <value stream="CLM_QIAN">$DIN_LOC_ROOT/atm/datm7</value>
+      <value stream="CLM_QIAN">/compyfs/zhou014/datasets/Climate_forcing/GPCC_domain/clm2_1x1global</value>
       <value stream="CLMCRUNCEPv7">$DIN_LOC_ROOT_CLMFORC/atm_forcing.datm7.cruncep_qianFill.0.5d.v7.c160715</value>
       <value stream="CLMCRUNCEP">$DIN_LOC_ROOT/share/domains/domain.clm</value>
       <value stream="CLMGSWP3v1">$DIN_LOC_ROOT_CLMFORC/atm_forcing.datm7.GSWP3.0.5d.v1.c170516</value>
@@ -284,7 +284,8 @@
       <value stream="CLM1PT.1x1_urbanc_alpha">domain.lnd.1x1pt-urbanc_alpha_navy.090715.nc </value>
       <value stream="CLM1PT.CLM_USRDAT">$ATM_DOMAIN_FILE</value>
       <value stream="CPLHISTForcing">null</value>
-      <value stream="CLM_QIAN\.">domain.T62.050609.nc</value>
+      <value stream="CLM_QIAN_OLD\.">domain.T62.050609.nc</value>
+      <value stream="CLM_QIAN\.">domain.lnd.fv1.0x1.0.130710.nc</value>
       <value stream="CLM_QIAN_WISO">domain.T62.050609.nc</value>
       <value stream="CLMCRUNCEPv7">domain.lnd.360x720_cruncep.130305.nc</value>
       <value stream="CLMCRUNCEP">domain.lnd.360x720.130305.nc</value>
@@ -438,9 +439,9 @@
       <value stream="CLM1PT.1x1_urbanc_alpha">$DIN_LOC_ROOT/atm/datm7/CLM1PT_data/urbanc_alpha.c080416 </value>
       <value stream="CLM1PT.CLM_USRDAT">$DIN_LOC_ROOT_CLMFORC/$CLM_USRDAT_NAME/CLM1PT_data</value>
       <value stream="CPLHISTForcing">$DATM_CPLHIST_DIR</value>
-      <value stream="CLM_QIAN.Solar">$DIN_LOC_ROOT/atm/datm7/atm_forcing.datm7.Qian.T62.c080727/Solar6Hrly</value>
-      <value stream="CLM_QIAN.Precip">$DIN_LOC_ROOT/atm/datm7/atm_forcing.datm7.Qian.T62.c080727/Precip6Hrly</value>
-      <value stream="CLM_QIAN.TPQW">$DIN_LOC_ROOT/atm/datm7/atm_forcing.datm7.Qian.T62.c080727/TmpPrsHumWnd3Hrly</value>
+      <value stream="CLM_QIAN.Solar">/compyfs/zhou014/datasets/Climate_forcing/GPCC_noleap</value>
+      <value stream="CLM_QIAN.Precip">/compyfs/zhou014/datasets/Climate_forcing/GPCC_noleap</value>
+      <value stream="CLM_QIAN.TPQW">/compyfs/zhou014/datasets/Climate_forcing/GPCC_noleap</value>
       <value stream="CLM_QIAN_WISO.Solar">$DIN_LOC_ROOT/atm/datm7/atm_forcing_iso.datm7.Qian.T62.c080727/Solar6Hrly</value>
       <value stream="CLM_QIAN_WISO.Precip">$DIN_LOC_ROOT/atm/datm7/atm_forcing_iso.datm7.Qian.T62.c080727/Precip6Hrly</value>
       <value stream="CLM_QIAN_WISO.TPQW">$DIN_LOC_ROOT/atm/datm7/atm_forcing_iso.datm7.Qian.T62.c080727/TmpPrsHumWnd3Hrly</value>
@@ -522,9 +523,12 @@
       <value  stream="CPLHISTForcing.State1hr">$DATM_CPLHIST_CASE.cpl.ha2x1h.%ym.nc</value>
       <value  stream="presaero.cplhist">$DATM_CPLHIST_CASE.cpl.ha2x1d.%ym.nc</value>
       <value  stream="topo.cplhist">$DATM_CPLHIST_CASE.cpl.ha2x3h.%ym.nc</value>
-      <value  stream="CLM_QIAN.Solar">clmforc.Qian.c2006.T62.Solr.%ym.nc</value>
-      <value  stream="CLM_QIAN.Precip">clmforc.Qian.c2006.T62.Prec.%ym.nc</value>
-      <value  stream="CLM_QIAN.TPQW">clmforc.Qian.c2006.T62.TPQW.%ym.nc</value>
+      <value  stream="CLM_QIAN_OLD.Solar">clmforc.Qian.c2006.T62.Solr.%ym.nc</value>
+      <value  stream="CLM_QIAN_OLD.Precip">clmforc.Qian.c2006.T62.Prec.%ym.nc</value>
+      <value  stream="CLM_QIAN_OLD.TPQW">clmforc.Qian.c2006.T62.TPQW.%ym.nc</value>
+      <value  stream="CLM_QIAN.Solar">clmforc.princeton.GPCC.%ym.nc</value>
+      <value  stream="CLM_QIAN.Precip">clmforc.princeton.GPCC.%ym.nc</value>
+      <value  stream="CLM_QIAN.TPQW">clmforc.princeton.GPCC.%ym.nc</value> 
       <value  stream="CLM_QIAN_WISO.Solar">clmforc.Qian.c2006.T62.Solr.%ym.nc</value>
       <value  stream="CLM_QIAN_WISO.Precip">clmforc.Qian.c2006.T62.Prec.%ym.nc</value>
       <value  stream="CLM_QIAN_WISO.TPQW">clmforc.Qian.c2006.T62.TPQW.%ym.nc</value>

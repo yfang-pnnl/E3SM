@@ -56,10 +56,10 @@ ifdef NETCDF_PATH
   MOD_NETCDF:=$(NETCDF_PATH)/include
 else
   ifeq ($(LIB_NETCDF),$(null))
-    LIB_NETCDF := /usr/local/lib
+    LIB_NETCDF := /share/apps/netcdf/4.6.3/intel/19.0.3/lib
   endif
   ifeq ($(INC_NETCDF),$(null))
-    INC_NETCDF := /usr/local/include
+    INC_NETCDF := /share/apps/netcdf/4.6.3/intel/19.0.3/include
   endif
 
   ifeq ($(MOD_NETCDF),$(null))

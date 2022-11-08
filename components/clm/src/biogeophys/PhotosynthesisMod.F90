@@ -96,7 +96,7 @@ module  PhotosynthesisMod
      real(r8), allocatable, private :: psi50              (:,:)
      real(r8), allocatable, private :: ck                 (:,:)
      real(r8), allocatable, public  :: psi_soil_ref       (:)
-     real(r8), allocatable, private :: lmr_intercept_atkin(:)
+!     real(r8), allocatable, private :: lmr_intercept_atkin(:)
   contains
      procedure, private :: allocParams
      procedure, public :: readParams
@@ -169,10 +169,10 @@ contains
     call ncd_io(varname=trim(tString),data=temp1d, flag='read', ncid=ncid,readvar=readv)
     if ( .not. readv ) call endrun(msg=trim(errCode)//trim(tString)//errMsg(__FILE__, __LINE__))
     params_inst%psi_soil_ref=temp1d
-    tString = "lmr_intercept_atkin"
-    call ncd_io(varname=trim(tString),data=temp1d, flag='read', ncid=ncid,readvar=readv)
-    if ( .not. readv ) call endrun(msg=trim(errCode)//trim(tString)//errMsg(__FILE__, __LINE__))
-    params_inst%lmr_intercept_atkin=temp1d
+!    tString = "lmr_intercept_atkin"
+!    call ncd_io(varname=trim(tString),data=temp1d, flag='read', ncid=ncid,readvar=readv)
+!    if ( .not. readv ) call endrun(msg=trim(errCode)//trim(tString)//errMsg(__FILE__, __LINE__))
+!    params_inst%lmr_intercept_atkin=temp1d
     tString = "kmax"
     call ncd_io(varname=trim(tString),data=temp2d, flag='read', ncid=ncid,readvar=readv)
     if ( .not. readv ) call endrun(msg=trim(errCode)//trim(tString)//errMsg(__FILE__, __LINE__))
@@ -1178,6 +1178,7 @@ contains
     real(r8) :: x, dx
     real(r8), parameter :: eps = 1.e-2_r8      !relative accuracy
     real(r8), parameter :: eps1= 1.e-4_r8
+!    integer,  parameter :: itmax = 4          !maximum number of iterations
     integer,  parameter :: itmax = 40          !maximum number of iterations
     real(r8) :: tol,minx,minf
 
@@ -1240,6 +1241,7 @@ contains
           exit
        endif
        if(iter>itmax)then 
+!    if( iter == itmax) write(iulog,*) 'hybrid exceeding maximum iterations'
           !in case of failing to converge within itmax iterations
           !stop at the minimum function
           !this happens because of some other issues besides the stomatal conductance calculation
@@ -1362,7 +1364,7 @@ contains
 
     enddo
 
-    if(iter==ITMAX)write(iulog,*) 'brent exceeding maximum iterations', b, fb
+!    if(iter==ITMAX)write(iulog,*) 'brent exceeding maximum iterations', b, fb
     x=b
 
     return
@@ -2774,6 +2776,8 @@ contains
     bsun  = 1._r8
     bsha  = 1._r8
     iter1 = 0
+    gs0sun = 0.0_r8
+    gs0sha = 0.0_r8
     
     do                       !outer loop updates bsun/bsha and makes two ci_func calls for interpolation
        x=vegwp(p,:)
@@ -2872,6 +2876,7 @@ contains
           endif
           
           if (iter2 > itmax) then
+!    if( iter2 > itmax) write(iulog,*) 'hybrid iter2 exceeding maximum iterations'
              x1sun=minxsun
              x1sha=minxsha
              call ci_func_PHS(x,x1sun, x1sha, f1sun, f1sha, p, iv, c, t, bsun, bsha, bflag, gb_mol, gs0sun, gs0sha,&
@@ -2898,6 +2903,7 @@ contains
        endif
        
        if (iter1 > itmax) then
+!    if( iter1 > itmax) write(iulog,*) 'hybrid iter1 exceeding maximum iterations'
           exit
        endif
     
@@ -2965,12 +2971,15 @@ contains
     integer                 :: phase                ! sun==1, sha==2
     integer , parameter     :: nphs = 2             ! number of phases for sun/shade
     integer , parameter     :: itmax = 20           ! maximum number of iterations
+!    integer , parameter     :: itmax = 2           ! maximum number of iterations
     real(r8), parameter     :: eps = 1.e-4_r8       ! relative error tolerance
     integer                 :: iter                 !
     real(r8)                :: a(nphs),b(nphs),c(nphs),d(nphs),e(nphs),fa(nphs),fb(nphs),fc(nphs)
     real(r8)                :: p(nphs),q(nphs),r(nphs),s(nphs),tol1(nphs),xm(nphs)
     real(r8)                :: x(nvegwcs)           !dummy variable passed to cifunc
     logical , parameter     :: bflag = .false.      !indicates the cifunc should not call calcstress
+    real(r8) :: gs0sun   ! unstressed sunlit stomatal conductance
+    real(r8) :: gs0sha   ! unstressed shaded stomatal conductance
     !------------------------------------------------------------------------------
     
     a(:)=(/x1sun,x1sha/)
@@ -3052,15 +3061,17 @@ contains
              b(phase)=b(phase)+sign(tol1(phase),xm(phase))
           endif
        enddo
-       
-       call ci_func_PHS(x,b(sun), b(sha), fb(sun), fb(sha), ip, iv, ic, it, bsun, bsha, bflag, gb_mol, gs_mol_sun, gs_mol_sha,&
+       gs0sun = gs_mol_sun
+       gs0sha = gs_mol_sha       
+!       call ci_func_PHS(x,b(sun), b(sha), fb(sun), fb(sha), ip, iv, ic, it, bsun, bsha, bflag, gb_mol, gs_mol_sun, gs_mol_sha,&
+       call ci_func_PHS(x,b(sun), b(sha), fb(sun), fb(sha), ip, iv, ic, it, bsun, bsha, bflag, gb_mol, gs0sun, gs0sha,&
             gs_mol_sun, gs_mol_sha, jesun, jesha, cair, oair, lmr_z_sun, lmr_z_sha, par_z_sun, par_z_sha, rh_can, &
             qsatl, qaf, atm2lnd_inst, photosyns_inst, canopystate_inst, waterstate_inst, soilstate_inst, &
             temperature_inst, waterflux_inst)
        
        if( (fb(sun) == 0._r8) .and. (fb(sha) == 0._r8) ) exit
     enddo
-    if( iter == itmax) write(iulog,*) 'brent exceeding maximum iterations', b, fb
+!    if( iter == itmax) write(iulog,*) 'brent exceeding maximum iterations', b, fb
     xsun=b(sun)
     xsha=b(sha)
     
@@ -3325,6 +3336,7 @@ contains
     integer  :: iter                  ! newton's method iteration number
     logical  :: flag                  ! signal that matrix was not invertible
     logical  :: night                 ! signal to store vegwp within this routine, b/c it is night-time and full suite won't be called
+!    integer, parameter  :: itmax=5   ! exit newton's method if iters>itmax
     integer, parameter  :: itmax=50   ! exit newton's method if iters>itmax
     real(r8), parameter :: tolf=1.e-6,toldx=1.e-9 !tolerances for a satisfactory solution
     logical  :: havegs                ! signals direction of calculation gs->qflx or qflx->gs 
@@ -3349,7 +3361,8 @@ contains
          sucsat        => soilstate_inst%sucsat_col               & ! Input:  [real(r8) (:,:) ]  minimum soil suction (mm)
          )
 
-    !temporary flag for night time vegwp(sun)>0  
+    !temporary flag for night time vegwp(sun)>0 
+    !print *,'in-calcstress' 
     if (x(sun)>0._r8) then
        night=.TRUE.
        x(sun)=x(sha)
@@ -3382,6 +3395,7 @@ contains
           flag = .false.
           exit
        end if
+!    if( iter == itmax) write(iulog,*) 'calcstress exceeding maximum iterations'
        if ( iter>itmax ) then                                 !exceeds max iters -> exit
           flag = .false.
           exit
@@ -3406,8 +3420,10 @@ contains
        endif
        
        
-       if ( maxval(abs(dx)) > 50000._r8) then
-          dx = 50000._r8 * dx / maxval(abs(dx))  !rescale step to max of 50000
+!       if ( maxval(abs(dx)) > 50000._r8) then
+!          dx = 50000._r8 * dx / maxval(abs(dx))  !rescale step to max of 50000
+       if ( maxval(abs(dx)) > 80000._r8) then
+          dx = 80000._r8 * dx / maxval(abs(dx))  !rescale step to max of 50000
        end if
 
 
@@ -3430,10 +3446,12 @@ contains
        end if
        
        ! this is a catch to force spac gradient to atmosphere
+!Fang
+!#if 0
        if ( x(xyl) > x(root) ) x(xyl) = x(root)
        if ( x(sun) > x(xyl) )  x(sun) = x(xyl)
        if ( x(sha) > x(xyl) )  x(sha) = x(xyl)
-       
+!#endif       
     end do
 
     else

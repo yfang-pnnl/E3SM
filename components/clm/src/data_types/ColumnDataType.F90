@@ -444,6 +444,7 @@ module ColumnDataType
     real(r8), pointer :: qflx_h2osfc_surf     (:)   => null() ! surface water runoff
     real(r8), pointer :: qflx_snow_h2osfc     (:)   => null() ! snow falling on surface water
     real(r8), pointer :: qflx_drain_perched   (:)   => null() ! sub-surface runoff from perched wt (mm H2O /s)
+    real(r8), pointer :: qflx_drain_mp        (:)   => null() ! sub-surface runoff due to macropores (mm H2O /s)
     real(r8), pointer :: qflx_deficit         (:)   => null() ! water deficit to keep non-negative liquid water content (mm H2O)   
     real(r8), pointer :: qflx_floodc          (:)   => null() ! flood water flux at column level
     real(r8), pointer :: qflx_sl_top_soil     (:)   => null() ! liquid water + ice from layer above soil to top soil layer or sent to qflx_qrgwl (mm H2O/s)
@@ -488,6 +489,7 @@ module ColumnDataType
     real(r8), pointer :: mflx_et              (:,:) => null() ! evapotranspiration sink from all soil coontrol volumes (kg H2O /s)
     real(r8), pointer :: mflx_drain           (:,:) => null() ! drainage from groundwater table (kg H2O /s)
     real(r8), pointer :: mflx_recharge        (:)   => null() ! recharge from soil column to unconfined aquifer (kg H2O /s)
+    real(r8), pointer :: macropore_frac       (:)   => null() ! fraction of water to bypass soil matrix due to macropores (-)
 
   contains
     procedure, public :: Init    => col_wf_init
@@ -5123,6 +5125,7 @@ contains
     allocate(this%qflx_infl              (begc:endc))             ; this%qflx_infl            (:)   = nan
     allocate(this%qflx_surf              (begc:endc))             ; this%qflx_surf            (:)   = nan
     allocate(this%qflx_drain             (begc:endc))             ; this%qflx_drain           (:)   = nan
+    allocate(this%qflx_drain_mp          (begc:endc))             ; this%qflx_drain_mp      (:)   = nan
     allocate(this%qflx_totdrain          (begc:endc))             ; this%qflx_totdrain        (:)   = nan
     allocate(this%qflx_top_soil          (begc:endc))             ; this%qflx_top_soil        (:)   = nan
     allocate(this%qflx_h2osfc_to_ice     (begc:endc))             ; this%qflx_h2osfc_to_ice   (:)   = nan
@@ -5176,6 +5179,8 @@ contains
     allocate(this%mflx_et                (begc:endc,1:nlevgrnd))  ; this%mflx_et                         (:,:) = nan
     allocate(this%mflx_drain             (begc:endc,1:nlevgrnd))  ; this%mflx_drain                      (:,:) = nan
     allocate(this%mflx_recharge          (begc:endc))             ; this%mflx_recharge                   (:)   = nan
+    allocate(this%macropore_frac         (begc:endc))             ; this%macropore_frac                  (:)   = 0._r8
+
     
     !-----------------------------------------------------------------------
     ! initialize history fields for select members of col_wf
@@ -5204,6 +5209,12 @@ contains
     call hist_addfld1d (fname='QDRAI',  units='mm/s',  &
          avgflag='A', long_name='sub-surface drainage', &
          ptr_col=this%qflx_drain, c2l_scale_type='urbanf')
+
+    this%qflx_drain_mp(begc:endc) = spval
+    call hist_addfld1d (fname='QDRAI_MP',  units='mm/s',  &
+         avgflag='A', long_name='sub-surface drainage from macropores', &
+         ptr_col=this%qflx_drain_mp, c2l_scale_type='urbanf')
+
 		 
     this%qflx_irr_demand(begc:endc) = spval
     call hist_addfld1d (fname='QIRRIG_WM',  units='mm/s',  &
@@ -5297,6 +5308,11 @@ contains
          avgflag='A', long_name='snow sinks (liquid water)', &
          ptr_col=this%snow_sinks, c2l_scale_type='urbanf')
 
+    this%qflx_rootsoi(begc:endc,:) = spval
+    call hist_addfld2d (fname='QROOTSINK',  units='mm/s', type2d='levgrnd', &
+         avgflag='A', long_name='water flux from soil to root in each soil-layer', &
+         ptr_col=this%qflx_rootsoi, l2g_scale_type='veg')
+
     !-----------------------------------------------------------------------
     ! set cold-start initial values for select members of col_wf
     !-----------------------------------------------------------------------
@@ -5317,6 +5333,7 @@ contains
        l = col_pp%landunit(c)
        if (lun_pp%itype(l) == istsoil .or. lun_pp%itype(l) == istcrop) then
           this%qflx_drain(c) = 0._r8
+          this%qflx_drain_mp(c) = 0._r8
           this%qflx_surf(c)  = 0._r8
        end if
     end do

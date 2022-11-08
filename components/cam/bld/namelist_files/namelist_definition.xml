@@ -7247,7 +7247,7 @@ Default: 20
 <entry id="outnc_large_files" type="logical" category="clm"
        group="clm_inparm" valid_values="" >
 on to output NetCDF files in large-file format
-<default>Default: FALSE</default>
+<default>Default: TRUE</default>
 </entry>
 
 <entry id="rest_flag" type="logical" category="clm"

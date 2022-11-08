@@ -202,6 +202,8 @@ module clm_varctl
   logical, public            :: use_fates_spitfire = .false.  ! true => use spitfire model
   logical, public            :: use_fates_logging = .false.            ! true => turn on logging module
   logical, public            :: use_fates_planthydro = .false.         ! true => turn on fates hydro
+  logical, public            :: use_fates_macropore = .false.          ! true =>turn on macropore for water bypassing soil matrix
+  logical, public            :: use_fates_cohort_age_tracking = .false. ! true => turn on cohort age tracking
   logical, public            :: use_fates_ed_st3   = .false.           ! true => static stand structure
   logical, public            :: use_fates_ed_prescribed_phys = .false. ! true => prescribed physiology
   logical, public            :: use_fates_inventory_init = .false.     ! true => initialize fates from inventory
@@ -339,6 +341,8 @@ module clm_varctl
   ! PETSc-based thermal model switches
   !----------------------------------------------------------
   logical, public :: use_petsc_thermal_model = .false.
+  !
+  logical           , public :: use_parflow_via_emi = .false.
 
   !----------------------------------------------------------
   ! Stub EM switches
