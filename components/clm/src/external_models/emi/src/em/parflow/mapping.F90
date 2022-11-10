@@ -652,6 +652,18 @@ contains
       call h5aclose_f(attribute_id,hdf5_err)
     endif
 
+    attribute_name = "pf_nlev"
+  
+    call H5aexists_f(data_set_id,attribute_name,attribute_exists,hdf5_err)
+    if (attribute_exists) then
+
+      attribute_dim = 1
+      call h5aopen_f(data_set_id,attribute_name,attribute_id,hdf5_err)
+      call h5aread_f(attribute_id,H5T_NATIVE_INTEGER,map%parflow_nlev, &
+                     attribute_dim,hdf5_err)
+      call h5aclose_f(attribute_id,hdf5_err)
+    endif
+
     call h5dclose_f(data_set_id, hdf5_err)
 
     !

@@ -508,7 +508,7 @@ contains
     ! Get PARFLOW states
     !call parflowModelGetUpdatedData(this%parflow_m)
     ! Get parflow soil properties
-    call parflowsoilprop(this%parflow_m%map_clm_sub_to_pf_sub%clm_nlevsoi)
+    call parflowsoilprop(this%parflow_m%map_clm_sub_to_pf_sub%parflow_nlev)
     call parflowModelGetTopFaceArea(this%parflow_m)
 
     ! Save the data need by ELM
@@ -537,6 +537,7 @@ contains
     !
     ! LOCAL VARAIBLES:
     integer                                      :: nlevmapped
+    integer                                      :: pf_nlevmapped
     character(len= 128)                          :: subname = 'CreateCLMPARFLOWInterfaceDate' ! subroutine name
 
     ! Initialize PETSc vector for data transfer between CLM and PARFLOW, defined in
@@ -551,6 +552,8 @@ contains
     ! file read by PARFLOW matches either nlevsoi or nlevgrnd
     clm_pf_idata%nzclm_mapped = this%parflow_m%map_clm_sub_to_pf_sub%clm_nlevsoi
     nlevmapped                = clm_pf_idata%nzclm_mapped
+    clm_pf_idata%nzpf_mapped = this%parflow_m%map_clm_sub_to_pf_sub%parflow_nlev
+    pf_nlevmapped                = clm_pf_idata%nzpf_mapped
     if ( (nlevmapped /= nlevsoi) .and. (nlevmapped /= nlevgrnd) ) then
        call endrun(trim(subname)//' ERROR: Number of layers PARFLOW thinks CLM should '// &
             'have do not match either nlevsoi or nlevgrnd. Abortting' )
@@ -597,6 +600,7 @@ contains
     ! !USES:
     use decompMod       , only : bounds_type, ldecomp
     use spmdMod     , only : mpicom, npes, iam
+    use LandunitType   , only : lun_pp                
     !
     implicit none
     !
@@ -614,7 +618,7 @@ contains
 
     ! Save cell IDs of CLM grid
     allocate(clm_cell_ids_nindex(     1:clm_npts     ))
-    allocate(clm_surf_cell_ids_nindex(1:clm_surf_npts))
+    !allocate(clm_surf_cell_ids_nindex(1:clm_surf_npts))
 
     nlevmapped     = clm_pf_idata%nzclm_mapped
     clm_npts       = 0
@@ -622,12 +626,12 @@ contains
     do g = bounds%begg, bounds%endg
        do j = 1,nlevmapped
           clm_npts = clm_npts + 1
-          clm_cell_ids_nindex(clm_npts) = (ldecomp%gdc2glo(g)-1)*nlevmapped + j - 1
+          !clm_cell_ids_nindex(clm_npts) = (ldecomp%gdc2glo(g)-1)*nlevmapped + j - 1
+          clm_cell_ids_nindex(clm_npts) = (ldecomp%gdc2glo_rc(g)-1)*nlevmapped + j - 1
        enddo
-       clm_surf_npts = clm_surf_npts + 1
-       clm_surf_cell_ids_nindex(clm_surf_npts) = (ldecomp%gdc2glo(g)-1)*nlevmapped
+       !clm_surf_npts = clm_surf_npts + 1
+       !clm_surf_cell_ids_nindex(clm_surf_npts) = (ldecomp%gdc2glo(g)-1)*nlevmapped
     enddo
-
     ! Initialize maps for transferring data between CLM and PARFLOW. Defined in
     ! parflow_dir/elm/parflow_model.F90
     call parflowModelInitMapping(this%parflow_m, clm_cell_ids_nindex, &
@@ -637,8 +641,7 @@ contains
     call parflowModelInitMapping(this%parflow_m, clm_cell_ids_nindex, &
                                   clm_npts, PF_SUB_TO_CLM_SUB,mpicom,iam)
     deallocate(clm_cell_ids_nindex)
-    deallocate(clm_surf_cell_ids_nindex)
-
+    !deallocate(clm_surf_cell_ids_nindex)
   end subroutine CreateCLMPARFLOWMaps
 
 
@@ -972,6 +975,7 @@ contains
 
     integer :: bounds_proc_begc, bounds_proc_endc
     integer :: nlevmapped
+    integer :: pf_nlevmapped
     real(r8) :: col_wtgcell
     real(r8) :: curr_secs
     real(r8) :: pftime
@@ -1083,6 +1087,7 @@ contains
     dmass_col(:)                = 0.d0
 
     nlevmapped = clm_pf_idata%nzclm_mapped
+    pf_nlevmapped = clm_pf_idata%nzpf_mapped
 
     call parflowModelGetSaturation(this%parflow_m,pf_sat,pf_grid_vol,pf_por)
 
@@ -1192,7 +1197,7 @@ contains
                mflx_dew_col_1d(c_idx)     + &
                mflx_snowlyr_col_1d(c_idx) + &
                mflx_sub_snow_col_1d(c_idx)  &
-               )*col_wtgcell*area_clm_loc(g_idx)
+               )*col_wtgcell*area_clm_loc(g_idx) 
        end if
        total_mass_flux_col(c) = 0.d0
     enddo
@@ -1205,39 +1210,29 @@ contains
           c_idx = (c - bounds_proc_begc)*nlevgrnd+j
           if (col_active(c) == 1) then
              qflx_clm_loc(g_idx) = qflx_clm_loc(g_idx) + &
-                  mflx_et_col_1d(c_idx)*area_clm_loc(g_idx) !kg/s*m2
+                  (mflx_et_col_1d(c_idx)+mflx_drain_col_1d(c_idx))*area_clm_loc(g_idx) 
              total_mass_flux_col(c) = total_mass_flux_col(c) + qflx_clm_loc(g_idx)/area_clm_loc(g_idx) !kg/s
- !  convert unit to 1/hr, already done in soilwatermovement.F90
- !  PARFLOW needs units of 1/h for PF_FLUX so divide by dz  
- !             qflx_clm_loc(g_idx) = qflx_clm_loc(g_idx)*3.6d0/col_dz(c,j)/(denh2o * 1.0d-3)/area_clm_loc(g_idx) !1/hr
-             qflx_clm_loc(g_idx) = qflx_clm_loc(g_idx)/area_clm_loc(g_idx) !kg/s
+             qflx_clm_loc(g_idx) = qflx_clm_loc(g_idx)/area_clm_loc(g_idx) /col_dz(c,j) !kg/m3/s
           end if
        end do
     end do
     call VecRestoreArrayF90(clm_pf_idata%qflx_clm, qflx_clm_loc, ierr); CHKERRQ(ierr)
     call VecRestoreArrayF90(clm_pf_idata%thetares2_clm, thetares2_clm_loc, ierr); CHKERRQ(ierr)
 
- !   call parflowModelUpdateFlowConds( this%parflow_m )
- !   call parflowModelStepperRunTillPauseTime( this%parflow_m, (nstep+1.0d0)*dtime )
     call parflowModelUpdateSourceSink(this%parflow_m,elm_flux)
  !
     curr_secs = nstep*dtime
     pftime = curr_secs/3600.d0
     pfdt = dtime/3600.d0
     ! convert unit from kg/s (mm/s) to 1/hr
-!    if(sum(abs(elm_flux)) .ne. 0.d0) then
-!     print*,'dz-',pf_grid_dz(1:nlevmapped)
-!     print *,'elm-flux-',elm_flux(1:nlevmapped)
-!stop
-!    endif
-    elm_flux(:) = elm_flux(:) * 3600.d0 * 1.0d-3 / pf_grid_dz(:) 
-    call elmparflowadvance(pftime,pfdt,elm_flux,pf_press,pf_porosity,pf_sat,nlevmapped, &
+    elm_flux(:) = elm_flux(:) * 3600.d0 * 1.0d-3 
+    call elmparflowadvance(pftime,pfdt,elm_flux,pf_press,pf_porosity,pf_sat,pf_nlevmapped, &
                            0,0,0,0)
 
 
     call VecGetArrayF90(clm_pf_idata%sat_clm   , sat_clm_loc   , ierr); CHKERRQ(ierr)
     call VecGetArrayF90(clm_pf_idata%mass_clm  , mass_clm_loc  , ierr); CHKERRQ(ierr)
-    call VecGetArrayF90(clm_pf_idata%watsat_clm, watsat_clm_loc, ierr); CHKERRQ(ierr)
+    call VecGetArrayF90(clm_pf_idata%watsat2_clm, watsat_clm_loc, ierr); CHKERRQ(ierr)
 
     do fc = 1, l2e_num_hydrologyc
        c = l2e_filter_hydrologyc(fc)
@@ -1252,11 +1247,8 @@ contains
        do j = nlevmapped, 1, -1
           g_idx = (g - bounds_clump%begg)*nlevmapped + j
 
-          e2l_h2osoi_liq(c,j) =  (1.d0 - frac_ice(c,j))*mass_clm_loc(g_idx)/area_clm_loc(g_idx) !mm = kg/m2
-          e2l_h2osoi_ice(c,j) =  frac_ice(c,j)         *mass_clm_loc(g_idx)/area_clm_loc(g_idx)
-
-          mass_end        = mass_end        + mass_clm_loc(g_idx)/area_clm_loc(g_idx)
-          mass_end_col(c) = mass_end_col(c) + mass_clm_loc(g_idx)/area_clm_loc(g_idx)
+          e2l_h2osoi_liq(c,j) = (1.d0 - frac_ice(c,j))*sat_clm_loc(g_idx)*watsat_clm_loc(g_idx)*col_dz(c,j)*1.e3_r8
+          e2l_h2osoi_ice(c,j) = frac_ice(c,j)*sat_clm_loc(g_idx)*watsat_clm_loc(g_idx)*col_dz(c,j)*1.e3_r8
 
        end do
 
@@ -1286,7 +1278,7 @@ contains
     call VecRestoreArrayF90(clm_pf_idata%area_top_face_clm, area_clm_loc, ierr); CHKERRQ(ierr)
     call VecRestoreArrayF90(clm_pf_idata%sat_clm   , sat_clm_loc   , ierr); CHKERRQ(ierr)
     call VecRestoreArrayF90(clm_pf_idata%mass_clm  , mass_clm_loc  , ierr); CHKERRQ(ierr)
-    call VecRestoreArrayF90(clm_pf_idata%watsat_clm, watsat_clm_loc, ierr); CHKERRQ(ierr)
+    call VecRestoreArrayF90(clm_pf_idata%watsat2_clm, watsat_clm_loc, ierr); CHKERRQ(ierr)
 
 
     deallocate(frac_ice                    )

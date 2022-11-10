@@ -34,7 +34,6 @@ contains
     character *(*), intent (in) :: filename
     !
     call elmparflowinit(filename, pf_num_nodes, pf_num_loc_nodes, pf_nxdim, pf_nydim, pf_nzdim)
-    write(*,*) 'in parflow_init',pf_num_loc_nodes,pf_num_nodes,pf_nxdim,pf_nydim,pf_nzdim
     allocate(pf_l2n(pf_num_loc_nodes))
     allocate(pf_l2g(pf_num_loc_nodes))
     allocate(pf_g2n(pf_num_nodes))
@@ -53,10 +52,6 @@ contains
     pf_grid_area(:) = 0.d0
     !
     call elmparflowgrid(pf_nxdim, pf_nydim, pf_nzdim, pf_l2n, pf_l2g, pf_g2n, pf_g2l, pf_grid_mask, pf_grid_vol,pf_grid_area,pf_grid_dz)   
-!    print*,'vol-',pf_grid_vol
-!    print *,'l2n-',pf_l2n(1:50)
-!    print *,'g2n-',pf_g2n(1:50)
-!    stop 
 !
   end subroutine parflow_init
 

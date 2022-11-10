@@ -117,6 +117,7 @@ module clm_parflow_interface_data
   PetscInt :: ngpf_srf   ! num of ghosted parflow cells (ghosted = local+ghosts)
 
   PetscInt :: nzclm_mapped ! num of CLM soil layers that are mapped
+  PetscInt :: nzpf_mapped ! num of Parflow layers that are mapped
 
   end type clm_parflow_idata_type
 
@@ -215,6 +216,7 @@ contains
     clm_pf_idata%eff_therm_cond_pf = PETSC_NULL_VEC
 
     clm_pf_idata%nzclm_mapped = 0
+    clm_pf_idata%nzpf_mapped = 0
 
   end subroutine CLMPARFLOWIDataInit
 
