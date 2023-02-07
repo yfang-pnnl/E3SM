@@ -57,7 +57,7 @@ contains
     use atm2lndType      , only : atm2lnd_type
     use elm_varpar       , only : nlevgrnd, nlevurb, nlevsoi
     use SoilHydrologyMod , only : ELMVICMap, Drainage
-    use elm_varctl       , only : use_vsfm
+    use elm_varctl       , only : use_vsfm, use_parflow_via_emi
     !
     ! !ARGUMENTS:
     type(bounds_type)        , intent(in)    :: bounds
@@ -112,6 +112,7 @@ contains
          qflx_drain_perched     => col_wf%qflx_drain_perched      , & ! Output: [real(r8) (:)   ]  sub-surface runoff from perched zwt (mm H2O /s)
          qflx_rsub_sat          => col_wf%qflx_rsub_sat           , & ! Output: [real(r8) (:)   ]  soil saturation excess [mm h2o/s]
          qflx_drain             => col_wf%qflx_drain              , & ! Output: [real(r8) (:)   ]  sub-surface runoff (mm H2O /s)
+         qflx_drain_mp          => col_wf%qflx_drain_mp              , & ! Output: [real(r8) (:)   ]  sub-surface runoff from macropore (mm H2O /s)                    
          qflx_surf              => col_wf%qflx_surf               , & ! Output: [real(r8) (:)   ]  surface runoff (mm H2O /s)
          qflx_infl              => col_wf%qflx_infl               , & ! Output: [real(r8) (:)   ]  infiltration (mm H2O /s)
          qflx_qrgwl             => col_wf%qflx_qrgwl              , & ! Output: [real(r8) (:)   ]  qflx_surf at glaciers, wetlands, lakes
@@ -139,7 +140,7 @@ contains
       endif
 #endif
 
-      if (.not. use_vsfm) then
+      if ((.not. (use_vsfm)) .or. (.not. use_parflow_via_emi)) then
          call Drainage(bounds, num_hydrologyc, filter_hydrologyc, &
               num_urbanc, filter_urbanc,&
               soilhydrology_vars, soilstate_vars, dtime)
@@ -281,7 +282,8 @@ contains
 
          end if
 
-         qflx_runoff(c) = qflx_drain(c) + qflx_surf(c)  + qflx_h2osfc_surf(c) + qflx_qrgwl(c) + qflx_drain_perched(c)
+         qflx_runoff(c) = qflx_drain(c) + qflx_surf(c)  + qflx_h2osfc_surf(c) + qflx_qrgwl(c) + qflx_drain_perched(c) &
+                           + qflx_drain_mp(c)
 
          if ((lun_pp%itype(l)==istsoil .or. lun_pp%itype(l)==istcrop) .and. col_pp%active(c)) then
             qflx_irr_demand(c) = -1.0_r8 * f_surf(g,tpu_ind)*qflx_irrig(c) !surface water demand send to MOSART

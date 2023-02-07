@@ -258,6 +258,7 @@ contains
           use_fates_nocomp,                             &
           use_fates_sp,                                 &
           fates_parteh_mode,                            &
+          use_fates_macropore,                          &
           use_fates_tree_damage
 
     namelist /elm_inparm / use_betr
@@ -291,6 +292,8 @@ contains
     namelist /elm_inparm/ &
          use_vsfm, vsfm_satfunc_type, vsfm_use_dynamic_linesearch, &
          vsfm_lateral_model_type, vsfm_include_seepage_bc
+    namelist /elm_inparm / &
+         use_parflow_via_emi
 
     namelist /elm_inparm/ use_hydrstress
 
@@ -767,6 +770,7 @@ contains
     call mpi_bcast (fates_paramfile, len(fates_paramfile) , MPI_CHARACTER, 0, mpicom, ier)
     call mpi_bcast (use_fates_logging, 1, MPI_LOGICAL, 0, mpicom, ier)
     call mpi_bcast (use_fates_planthydro, 1, MPI_LOGICAL, 0, mpicom, ier)
+    call mpi_bcast (use_fates_macropore, 1, MPI_LOGICAL, 0, mpicom, ier)
     call mpi_bcast (use_fates_cohort_age_tracking, 1, MPI_LOGICAL, 0, mpicom, ier)
     call mpi_bcast (use_fates_ed_st3, 1, MPI_LOGICAL, 0, mpicom, ier)
     call mpi_bcast (use_fates_fixed_biogeog, 1, MPI_LOGICAL, 0, mpicom, ier)
@@ -919,6 +923,8 @@ contains
     ! soil erosion
     call mpi_bcast (use_erosion, 1, MPI_LOGICAL, 0, mpicom, ier)
     call mpi_bcast (ero_ccycle , 1, MPI_LOGICAL, 0, mpicom, ier)
+    ! ELM-PARFLOW coupling
+    call mpi_bcast (use_parflow_via_emi, 1, MPI_LOGICAL, 0, mpicom, ier)
 
     ! Budget
     call mpi_bcast (do_budgets   , 1, MPI_LOGICAL, 0, mpicom, ier)
@@ -1171,6 +1177,7 @@ contains
        write(iulog, *) '    use_fates_logging = ', use_fates_logging
        write(iulog, *) '    fates_paramfile = ', fates_paramfile
        write(iulog, *) '    use_fates_planthydro = ', use_fates_planthydro
+       write(iulog, *) '    use_fates_macropore = ', use_fates_macropore
        write(iulog, *) '    use_fates_tree_damage = ', use_fates_tree_damage
        write(iulog, *) '    use_fates_cohort_age_tracking = ',use_fates_cohort_age_tracking
        write(iulog, *) '    fates_parteh_mode = ', fates_parteh_mode

@@ -134,7 +134,7 @@ contains
     use elm_varcon        , only : denh2o, denice, wimp, ssi
     use landunit_varcon   , only : istsoil
     use AerosolMod        , only : AerosolFluxes
-    use elm_varctl        , only : use_vsfm
+    use elm_varctl        , only : use_vsfm, use_parflow_via_emi
     !
     ! !ARGUMENTS:
     type(bounds_type)     , intent(in)    :: bounds
@@ -260,7 +260,7 @@ contains
                wgdif=h2osoi_liq(c,j)
                if (wgdif >= 0._r8) exit
                h2osoi_liq(c,j) = 0._r8
-               if (.not.(j+1 > 0 .and. use_vsfm)) then
+               if (.not.(j+1 > 0 .and. (use_vsfm .or. use_parflow_via_emi) )) then
                   h2osoi_liq(c,j+1) = h2osoi_liq(c,j+1) + wgdif
                else
                   mflx_neg_snow_col_1d(c-bounds%begc+1) = wgdif/dtime

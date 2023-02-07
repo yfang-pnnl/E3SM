@@ -2002,12 +2002,20 @@ this mask will have smb calculated over the entire global land surface
 <pflotran_prefix>pflotran_clm</pflotran_prefix>
 
 <!-- =========================================  -->
+<!-- Defaults for clm_parflow_inparm interface -->
+<!-- =========================================  -->
+<parflow_inputdir>parflow</parflow_inputdir>
+<parflow_prefix>parflow_clm</parflow_prefix>
+<pf_elm_mapfile>mapping.txt</pf_elm_mapfile>
+
+<!-- =========================================  -->
 <!-- Defaults for FATES interface -->
 <!-- =========================================  -->
 <fates_spitfire_mode           use_fates=".true.">0</fates_spitfire_mode>
 <use_fates_fixed_biogeog       use_fates=".true.">.false.</use_fates_fixed_biogeog>
 <use_fates_nocomp              use_fates=".true.">.false.</use_fates_nocomp>
 <use_fates_planthydro          use_fates=".true.">.false.</use_fates_planthydro>
+<use_fates_macropore           use_fates=".true.">.false.</use_fates_macropore>
 <use_fates_tree_damage         use_fates=".true.">.false.</use_fates_tree_damage>
 <use_fates_ed_st3              use_fates=".true.">.false.</use_fates_ed_st3>
 <use_fates_ed_prescribed_phys  use_fates=".true.">.false.</use_fates_ed_prescribed_phys>

@@ -961,6 +961,7 @@ CONTAINS
        rcode = pio_inq_vardimid(pioid, varid, dimid(1:ndims))
        if (ndims >= 1) rcode = pio_inq_dimlen(pioid, dimid(1), nx)
        if (ndims >= 2) rcode = pio_inq_dimlen(pioid, dimid(2), ny)
+       nz = 0
        if (ndims >= 3) rcode = pio_inq_dimlen(pioid, dimid(3), nz)
        deallocate(dimid)
        if (gsize /= nx*ny .and. gsize /= nx*ny*nz) then

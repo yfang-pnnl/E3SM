@@ -52,6 +52,7 @@ contains
     use elm_varpar      , only : nlevsoi, nlevgrnd, maxpatch_pft
     use elm_varpar      , only : nlayer, nlayert
     use elm_varctl      , only : use_var_soil_thick
+    use elm_varctl, only : use_parflow_via_emi
     use SoilWaterMovementMod, only : zengdecker_2009_with_var_soil_thick
     !
     ! !ARGUMENTS:
@@ -103,6 +104,7 @@ contains
          qflx_surf        =>    col_wf%qflx_surf        , & ! Output: [real(r8) (:)   ]  surface runoff (mm H2O /s)
          qflx_irrig       =>    col_wf%qflx_irrig       , & ! Input:  [real(r8) (:)   ]  irrigation flux (mm H2O /s)
          irrig_rate       =>    veg_wf%irrig_rate       , & ! Input:  [real(r8) (:)   ]  current irrigation rate (applied if !n_irrig_steps_left > 0) [mm/s]
+         macropore_frac   =>    col_wf%macropore_frac   , & ! Input:  [real(r8) (:)   ]  fraction of net water input from top to macropore (-)
 
          zwt              =>    soilhydrology_vars%zwt_col          , & ! Input:  [real(r8) (:)   ]  water table depth (m)
          max_moist        =>    soilhydrology_vars%max_moist_col    , & ! Input:  [real(r8) (:,:) ]  maximum soil moisture (ice + liq, mm)
@@ -199,34 +201,37 @@ contains
       do fc = 1, num_hydrologyc
          c = filter_hydrologyc(fc)
 
+         if(.not. use_parflow_via_emi) then
          ! assume qinmax large relative to qflx_top_soil in control
          if (origflag == 1) then
-            qflx_surf(c) =  fcov(c) * qflx_top_soil(c)
+            qflx_surf(c) =  fcov(c) * qflx_top_soil(c) * (1._r8-macropore_frac(c))
          else
             ! only send fast runoff directly to streams
-            qflx_surf(c) =   fsat(c) * qflx_top_soil(c)
+            qflx_surf(c) =   fsat(c) * qflx_top_soil(c)*(1._r8-macropore_frac(c))
+         endif
          endif
       end do
 
       ! Determine water in excess of ponding limit for urban roof and impervious road.
       ! Excess goes to surface runoff. No surface runoff for sunwall and shadewall.
 
+      if( .not. use_parflow_via_emi ) then
       do fc = 1, num_urbanc
          c = filter_urbanc(fc)
          if (col_pp%itype(c) == icol_roof .or. col_pp%itype(c) == icol_road_imperv) then
 
             ! If there are snow layers then all qflx_top_soil goes to surface runoff
             if (snl(c) < 0) then
-               qflx_surf(c) = max(0._r8,qflx_top_soil(c))
+               qflx_surf(c) = max(0._r8,qflx_top_soil(c)*(1._r8-macropore_frac(c)))
             else
                xs(c) = max(0._r8, &
-                    h2osoi_liq(c,1)/dtime + qflx_top_soil(c) - qflx_evap_grnd(c) - &
+                    h2osoi_liq(c,1)/dtime + qflx_top_soil(c)* (1._r8-macropore_frac(c)) - qflx_evap_grnd(c) - &
                     pondmx_urban/dtime)
                if (xs(c) > 0.) then
                   h2osoi_liq(c,1) = pondmx_urban
                else
                   h2osoi_liq(c,1) = max(0._r8,h2osoi_liq(c,1)+ &
-                       (qflx_top_soil(c)-qflx_evap_grnd(c))*dtime)
+                       (qflx_top_soil(c)* (1._r8-macropore_frac(c))-qflx_evap_grnd(c))*dtime)
                end if
                qflx_surf(c) = xs(c)
             end if
@@ -237,6 +242,9 @@ contains
          qflx_surf(c) = qflx_surf(c)  + qflx_floodc(c)
 
       end do
+      else
+        qflx_surf(:) = 0.d0
+      endif
 
       ! remove stormflow and snow on h2osfc from qflx_top_soil
       do fc = 1, num_hydrologyc
@@ -266,6 +274,7 @@ contains
      use column_varcon    , only : icol_roof, icol_road_imperv, icol_sunwall, icol_shadewall, icol_road_perv
      use landunit_varcon  , only : istsoil, istcrop
      use clm_time_manager , only : get_step_size, get_nstep
+     use elm_varctl, only : use_parflow_via_emi
      use atm2lndType      , only : atm2lnd_type ! land river two way coupling
      use lnd2atmType      , only : lnd2atm_type
      use subgridAveMod    , only : c2g
@@ -370,6 +379,7 @@ contains
           ice                  =>    soilhydrology_vars%ice_col              , & ! Input:  [real(r8) (:,:) ]  ice len in each VIC layers(ice, mm)
           i_0                  =>    soilhydrology_vars%i_0_col              , & ! Input:  [real(r8) (:)   ]  column average soil moisture in top VIC layers (mm)
           h2osfcflag           =>    soilhydrology_vars%h2osfcflag           , & ! Input:  logical
+          macropore_frac       =>    col_wf%macropore_frac                   , & ! Input:  [real(r8) (:)   ]  fraction of net water input from top to macropore (-)
           icefrac              =>    soilhydrology_vars%icefrac_col            & ! Output: [real(r8) (:,:) ]  fraction of ice
               )
 
@@ -390,6 +400,7 @@ contains
           c = filter_hydrologyc(fc)
           g = cgridcell(c)
           ! partition moisture fluxes between soil and h2osfc
+          if(.not.  use_parflow_via_emi) then
           if (lun_pp%itype(col_pp%landunit(c)) == istsoil .or. lun_pp%itype(col_pp%landunit(c))==istcrop) then
 
              ! explicitly use frac_sno=0 if snl=0
@@ -415,9 +426,9 @@ contains
              endif
 
              !1. partition surface inputs between soil and h2osfc
-             qflx_in_soil(c) = (1._r8 - frac_h2osfc(c)) * (qflx_top_soil(c)  - qflx_surf(c))
-             qflx_in_h2osfc(c) = frac_h2osfc(c) * (qflx_top_soil(c)  - qflx_surf(c))
-             qflx_gross_infl_soil(c) = (1._r8 - frac_h2osfc(c)) * (qflx_top_soil(c)  - qflx_surf(c))
+             qflx_in_soil(c) = (1._r8 - frac_h2osfc(c)) * (qflx_top_soil(c)* (1._r8-macropore_frac(c))  - qflx_surf(c))
+             qflx_in_h2osfc(c) = frac_h2osfc(c) * (qflx_top_soil(c)* (1._r8-macropore_frac(c))  - qflx_surf(c))          
+             qflx_gross_infl_soil(c) = (1._r8 - frac_h2osfc(c)) * (qflx_top_soil(c)* (1._r8-macropore_frac(c))  - qflx_surf(c))
 
              !2. remove evaporation (snow treated in SnowHydrology)
              qflx_in_soil(c) = qflx_in_soil(c) - (1.0_r8 - fsno - frac_h2osfc(c))*qflx_evap(c)
@@ -558,17 +569,37 @@ contains
              ! non-vegetated landunits (i.e. urban) use original CLM4 code
              if (snl(c) >= 0) then
                 ! when no snow present, sublimation is removed in Drainage
-                qflx_infl(c) = qflx_top_soil(c) - qflx_surf(c) - qflx_evap_grnd(c)
-                qflx_gross_infl_soil(c) = qflx_top_soil(c) - qflx_surf(c)
-                qflx_gross_evap_soil(c) = qflx_evap_grnd(c)
+                qflx_infl(c) = qflx_top_soil(c)* (1._r8-macropore_frac(c)) - qflx_surf(c) - qflx_evap_grnd(c)
+                qflx_gross_infl_soil(c) = qflx_top_soil(c)*(1._r8-macropore_frac(c)) - qflx_surf(c)
+                qflx_gross_evap_soil(c) = qflx_evap_grnd(c)                
              else
-                qflx_infl(c) = qflx_top_soil(c) - qflx_surf(c) &
+                qflx_infl(c) = qflx_top_soil(c)*(1._r8-macropore_frac(c)) - qflx_surf(c) &
                      - (1.0_r8 - frac_sno(c)) * qflx_ev_soil(c)
-                qflx_gross_infl_soil(c) = qflx_top_soil(c) - qflx_surf(c)
-                qflx_gross_evap_soil(c) = (1.0_r8 - frac_sno(c)) * qflx_ev_soil(c)
+                qflx_gross_infl_soil(c) = qflx_top_soil(c)*(1._r8-macropore_frac(c)) - qflx_surf(c)
+                qflx_gross_evap_soil(c) = (1.0_r8 - frac_sno(c)) * qflx_ev_soil(c)                     
              end if
              qflx_h2osfc_surf(c) = 0._r8
           endif
+          else
+! parflow
+!#endif
+!Fang test
+!qflx_surf = 0
+             if (snl(c) >= 0) then
+                ! when no snow present, sublimation is removed in Drainage
+                qflx_infl(c) = qflx_top_soil(c)* (1._r8-macropore_frac(c)) - qflx_evap_grnd(c)
+                qflx_gross_infl_soil(c) = qflx_top_soil(c)*(1._r8-macropore_frac(c))
+                qflx_gross_evap_soil(c) = qflx_evap_grnd(c)                
+             else
+                qflx_infl(c) = qflx_top_soil(c)*(1._r8-macropore_frac(c)) &
+                     - (1.0_r8 - frac_sno(c)) * qflx_ev_soil(c)
+                qflx_gross_infl_soil(c) = qflx_top_soil(c)*(1._r8-macropore_frac(c))
+                qflx_gross_evap_soil(c) = (1.0_r8 - frac_sno(c)) * qflx_ev_soil(c)                     
+             end if
+             qflx_h2osfc_surf(c) = 0._r8
+!#if 0
+         endif
+!#endif
 
        enddo
 
@@ -600,7 +631,7 @@ contains
      use elm_varcon       , only : pondmx, tfrz, watmin,denice,denh2o
      use elm_varpar       , only : nlevsoi, nlevgrnd
      use column_varcon    , only : icol_roof, icol_road_imperv
-     use elm_varctl       , only : use_vsfm, use_var_soil_thick
+     use elm_varctl       , only : use_vsfm, use_parflow_via_emi, use_var_soil_thick
      use domainMod        , only : ldomain
      use SoilWaterMovementMod, only : zengdecker_2009_with_var_soil_thick
      !
@@ -691,6 +722,7 @@ contains
           qflx_sub_snow      =>    col_wf%qflx_sub_snow      , & ! Output: [real(r8) (:)   ]  sublimation rate from snow pack (mm H2O /s) [+]
           qflx_drain         =>    col_wf%qflx_drain         , & ! Output: [real(r8) (:)   ]  sub-surface runoff (mm H2O /s)
           qflx_drain_perched =>    col_wf%qflx_drain_perched , & ! Output: [real(r8) (:)   ]  perched wt sub-surface runoff (mm H2O /s)
+          qflx_drain_mp      =>    col_wf%qflx_drain_mp      , & ! Output: [real(r8) (:)   ]  sub-surface runoff from macropore (mm H2O /s)                    
           qflx_rsub_sat      =>    col_wf%qflx_rsub_sat        & ! Output: [real(r8) (:)   ]  soil saturation excess [mm h2o/s]
           )
 
@@ -705,10 +737,11 @@ contains
           end do
        end do
 
-       if (.not.use_vsfm) then
+       if (.not. (use_vsfm .or. use_parflow_via_emi) ) then
           do fc = 1, num_hydrologyc
              c = filter_hydrologyc(fc)
              qflx_drain(c)    = 0._r8
+             qflx_drain_mp(c) = 0._r8
              qflx_rsub_sat(c) = 0._r8
              qflx_drain_perched(c)  = 0._r8
           end do
@@ -890,7 +923,7 @@ contains
           if (snl(c)+1 >= 1) then
 
              ! make consistent with how evap_grnd removed in infiltration
-             if (.not.use_vsfm) then
+             if (.not. (use_vsfm .or. use_parflow_via_emi) ) then
                 h2osoi_liq(c,1) = h2osoi_liq(c,1) + (1._r8 - frac_h2osfc(c))*qflx_dew_grnd(c) * dtime
                 h2osoi_ice(c,1) = h2osoi_ice(c,1) + (1._r8 - frac_h2osfc(c))*qflx_dew_snow(c) * dtime
                 if (qflx_sub_snow(c)*dtime > h2osoi_ice(c,1)) then
@@ -939,7 +972,7 @@ contains
      use elm_varpar       , only : nlevsoi, nlevgrnd, nlayer, nlayert
      use elm_varcon       , only : pondmx, tfrz, watmin,rpi, secspday, nlvic
      use column_varcon    , only : icol_roof, icol_road_imperv, icol_road_perv
-     use elm_varctl       , only : use_vsfm, use_var_soil_thick
+     use elm_varctl       , only : use_vsfm, use_parflow_via_emi, use_var_soil_thick
      use SoilWaterMovementMod, only : zengdecker_2009_with_var_soil_thick
      use pftvarcon        , only : rsub_top_globalmax
      !
@@ -1048,10 +1081,13 @@ contains
           !qflx_dew_snow      =>    col_wf%qflx_dew_snow      , & ! Output: [real(r8) (:)   ] surface dew added to snow pack (mm H2O /s) [+]
           !qflx_sub_snow      =>    col_wf%qflx_sub_snow      , & ! Output: [real(r8) (:)   ] sublimation rate from snow pack (mm H2O /s) [+]
           qflx_drain         =>    col_wf%qflx_drain         , & ! Output: [real(r8) (:)   ] sub-surface runoff (mm H2O /s)
+          qflx_drain_mp      =>    col_wf%qflx_drain_mp      , & ! Output: [real(r8) (:)   ] sub-surface runoff from macropores (mm H2O /s)                    
+          qflx_top_soil    =>    col_wf%qflx_top_soil    , & ! Output: [real(r8) (:)   ]  net water input into soil from top (mm/s)
           qflx_qrgwl         =>    col_wf%qflx_qrgwl         , & ! Output: [real(r8) (:)   ] qflx_surf at glaciers, wetlands, lakes (mm H2O /s)
           qflx_rsub_sat      =>    col_wf%qflx_rsub_sat      , & ! Output: [real(r8) (:)   ] soil saturation excess [mm h2o/s]
           qflx_drain_perched =>    col_wf%qflx_drain_perched , & ! Output: [real(r8) (:)   ] perched wt sub-surface runoff (mm H2O /s)
 
+          macropore_frac     =>    col_wf%macropore_frac    , & ! Output: [real(r8) (:)   ]  fraction of net water input into macropore from top (-)         
           h2osoi_liq         =>    col_ws%h2osoi_liq        , & ! Output: [real(r8) (:,:) ] liquid water (kg/m2)
           h2osoi_ice         =>    col_ws%h2osoi_ice          & ! Output: [real(r8) (:,:) ] ice lens (kg/m2)
           )
@@ -1075,6 +1111,7 @@ contains
        do fc = 1, num_hydrologyc
           c = filter_hydrologyc(fc)
           qflx_drain(c)    = 0._r8
+          qflx_drain_mp(c) = 0._r8 
           rsub_bot(c)      = 0._r8
           qflx_rsub_sat(c) = 0._r8
           rsub_top(c)      = 0._r8
@@ -1159,7 +1196,7 @@ contains
              do k = jwt(c)+1, k_frz
                 rsub_top_layer=max(rsub_top_tot,-(h2osoi_liq(c,k)-watmin))
                 rsub_top_layer=min(rsub_top_layer,0._r8)
-                if (use_vsfm) then
+                if (use_vsfm .or. use_parflow_via_emi) then
                    rsub_top_layer = 0._r8
                 endif
                 rsub_top_tot = rsub_top_tot - rsub_top_layer
@@ -1245,7 +1282,7 @@ contains
                 do k = k_perch+1, k_frz
                    rsub_top_layer=max(rsub_top_tot,-(h2osoi_liq(c,k)-watmin))
                    rsub_top_layer=min(rsub_top_layer,0._r8)
-                   if (use_vsfm) rsub_top_layer = 0._r8
+                   if (use_vsfm .or. use_parflow_via_emi) rsub_top_layer = 0._r8
                    rsub_top_tot = rsub_top_tot - rsub_top_layer
 
                    h2osoi_liq(c,k) = h2osoi_liq(c,k) + rsub_top_layer
@@ -1319,7 +1356,7 @@ contains
 		end if
              end if
 
-             if (use_vsfm) rsub_top(c) = 0._r8
+             if (use_vsfm .or. use_parflow_via_emi) rsub_top(c) = 0._r8
 
              ! use analytical expression for aquifer specific yield
              rous = watsat(c,nlevbed) &
@@ -1376,7 +1413,7 @@ contains
                       do j = (nlvic(1)+nlvic(2)+1), nlevbed
                          rsub_top_layer=max(rsub_top_tot, rsub_top_tot*hk_l(c,j)*dzmm(c,j)/wtsub_vic)
                          rsub_top_layer=min(rsub_top_layer,0._r8)
-                         if (use_vsfm) rsub_top_layer = 0._r8
+                         if (use_vsfm .or. use_parflow_via_emi) rsub_top_layer = 0._r8
                          h2osoi_liq(c,j) = h2osoi_liq(c,j) + rsub_top_layer
                          rsub_top_tot = rsub_top_tot - rsub_top_layer
                       end do
@@ -1389,7 +1426,7 @@ contains
 
                          rsub_top_layer=max(rsub_top_tot,-(s_y*(zi(c,j) - zwt(c))*1.e3))
                          rsub_top_layer=min(rsub_top_layer,0._r8)
-                         if (use_vsfm) rsub_top_layer = 0._r8
+                         if (use_vsfm .or. use_parflow_via_emi) rsub_top_layer = 0._r8
                          h2osoi_liq(c,j) = h2osoi_liq(c,j) + rsub_top_layer
 
                          rsub_top_tot = rsub_top_tot - rsub_top_layer
@@ -1446,7 +1483,7 @@ contains
       	  nlevbed = nlev2bed(c)
           do j = nlevbed,2,-1
              xsi(c)            = max(h2osoi_liq(c,j)-eff_porosity(c,j)*dzmm(c,j),0._r8)
-             if (use_vsfm) then
+             if (use_vsfm .or. use_parflow_via_emi) then
                 xsi(c) = 0._r8
              else
                 h2osoi_liq(c,j)   = min(eff_porosity(c,j)*dzmm(c,j), h2osoi_liq(c,j))
@@ -1461,7 +1498,7 @@ contains
           !scs: watmin addition to fix water balance errors
           xs1(c)          = max(max(h2osoi_liq(c,1)-watmin,0._r8)- &
                max(0._r8,(pondmx+watsat(c,1)*dzmm(c,1)-h2osoi_ice(c,1)-watmin)),0._r8)
-          if (use_vsfm) xs1(c) = 0._r8
+          if (use_vsfm .or. use_parflow_via_emi) xs1(c) = 0._r8
           h2osoi_liq(c,1) = h2osoi_liq(c,1) - xs1(c)
 
           if (lun_pp%urbpoi(col_pp%landunit(c))) then
@@ -1477,7 +1514,7 @@ contains
              endif
           endif
 
-          if (use_vsfm) qflx_rsub_sat(c) = 0._r8
+          if (use_vsfm .or. use_parflow_via_emi) qflx_rsub_sat(c) = 0._r8
 
           ! add in ice check
           xs1(c)          = max(max(h2osoi_ice(c,1),0._r8)-max(0._r8,(pondmx+watsat(c,1)*dzmm(c,1)-h2osoi_liq(c,1))),0._r8)
@@ -1545,6 +1582,7 @@ contains
           ! Sub-surface runoff and drainage
 
           qflx_drain(c) = qflx_rsub_sat(c) + rsub_top(c)
+          qflx_drain_mp(c) = macropore_frac(c)*qflx_top_soil(c)
 
           ! Set imbalance for snow capping
 
@@ -1558,6 +1596,7 @@ contains
           c = filter_urbanc(fc)
           if (col_pp%itype(c) /= icol_road_perv) then
              qflx_drain(c) = 0._r8
+             qflx_drain_mp(c) = 0._r8 
              ! This must be done for roofs and impervious road (walls will be zero)
              qflx_qrgwl(c) = qflx_snwcp_liq(c)
           end if

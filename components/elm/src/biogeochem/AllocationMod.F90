@@ -1112,8 +1112,10 @@ contains
               ! Overwrite the column level demands, since fates plants are all sharing
               ! the same space, in units per the same square meter, we just add demand
               ! to scale up to column
+#if 0
               plant_ndemand_col(c) = sum(elm_fates%fates(ci)%bc_out(s)%n_demand(1:n_pcomp))
               plant_pdemand_col(c) = sum(elm_fates%fates(ci)%bc_out(s)%p_demand(1:n_pcomp))
+#endif
 
               ! We fill the vertically resolved array to simplify some jointly used code
               do j = 1, nlevdecomp
@@ -1122,7 +1124,7 @@ contains
               end do
 
            else  !(ECA)
-
+#if 0
               do f = 1,n_pcomp
                  filter_pcomp(f) = f
               end do
@@ -1144,6 +1146,7 @@ contains
               plant_pdemand_vr_ptr   => plant_pdemand_vr_fates
               km_p_ptr               => elm_fates%fates(ci)%bc_pconst%eca_km_p
               vmax_p_ptr             => elm_fates%fates(ci)%bc_pconst%eca_vmax_p
+#endif
 
            end if
 
@@ -1698,12 +1701,12 @@ contains
 
            if (nu_com .eq. 'RD') then
 
+#if 0
               if( plant_ndemand_col(c)>tiny(plant_ndemand_col(c)) ) then
                  do f = 1,n_pcomp
                     do j = 1,nlevdecomp
 
                        j_f =  elm_fates%fates(ci)%bc_pconst%j_uptake(j)
-
                        elm_fates%fates(ci)%bc_in(s)%plant_nh4_uptake_flux(f,j_f) = & 
                             elm_fates%fates(ci)%bc_in(s)%plant_nh4_uptake_flux(f,j_f) + &
                             smin_nh4_to_plant_vr(c,j)*dt*dzsoi_decomp(j) * &
@@ -1713,7 +1716,6 @@ contains
                             elm_fates%fates(ci)%bc_in(s)%plant_no3_uptake_flux(f,j_f) + &
                             smin_no3_to_plant_vr(c,j)*dt*dzsoi_decomp(j) * &
                             (elm_fates%fates(ci)%bc_out(s)%n_demand(f)/plant_ndemand_col(c))
-
                     end do
                  end do
               end if
@@ -1730,6 +1732,7 @@ contains
                   end do
                end do
             end if
+#endif
 
          else ! ECA or MIC mode
 

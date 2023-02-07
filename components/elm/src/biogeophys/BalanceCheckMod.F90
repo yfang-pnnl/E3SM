@@ -236,6 +236,7 @@ contains
           qflx_surf                  =>    col_wf%qflx_surf               , & ! Input:  [real(r8) (:)   ]  surface runoff (mm H2O /s)
           qflx_qrgwl                 =>    col_wf%qflx_qrgwl              , & ! Input:  [real(r8) (:)   ]  qflx_surf at glaciers, wetlands, lakes
           qflx_drain                 =>    col_wf%qflx_drain              , & ! Input:  [real(r8) (:)   ]  sub-surface runoff (mm H2O /s)
+          qflx_drain_mp              =>    col_wf%qflx_drain_mp           , & ! Input:  [real(r8) (:)   ]  sub-surface runoff from macropores (mm H2O /s)          
           qflx_runoff                =>    col_wf%qflx_runoff             , & ! Input:  [real(r8) (:)   ]  total runoff (mm H2O /s)
           qflx_glcice                =>    col_wf%qflx_glcice             , & ! Input:  [real(r8) (:)   ]  flux of new glacier ice (mm H2O /s) [+ if ice grows]
           qflx_glcice_melt           =>    col_wf%qflx_glcice_melt        , & ! Input:  [real(r8) (:)   ]  ice melt (mm H2O/s)
@@ -319,7 +320,7 @@ contains
                   - (forc_rain_col(c) + forc_snow_col(c)  + qflx_floodc(c) + qflx_surf_irrig_col(c) + qflx_over_supply_col(c) &
                   - qflx_evap_tot(c) - qflx_surf(c)  - qflx_h2osfc_surf(c) &
                   - qflx_qrgwl(c) - qflx_drain(c) - qflx_drain_perched(c) - qflx_snwcp_ice(c) &
-                  - qflx_lateral(c) + qflx_h2orof_drain(c)) * dtime
+                  - qflx_drain_mp(c) - qflx_lateral(c) + qflx_h2orof_drain(c)) * dtime
              dwb(c) = (endwb(c)-begwb(c))/dtime
 
           else
@@ -412,6 +413,7 @@ contains
              write(iulog,*)'qflx_h2osfc_surf           = ',qflx_h2osfc_surf(indexc)
              write(iulog,*)'qflx_qrgwl                 = ',qflx_qrgwl(indexc)
              write(iulog,*)'qflx_drain                 = ',qflx_drain(indexc)
+             write(iulog,*)'qflx_drain_mp              = ',qflx_drain_mp(indexc)
              write(iulog,*)'qflx_drain_perched         = ',qflx_drain_perched(indexc)
              write(iulog,*)'qflx_flood                 = ',qflx_floodc(indexc)
              write(iulog,*)'qflx_snwcp_ice             = ',qflx_snwcp_ice(indexc)
@@ -957,6 +959,7 @@ contains
           qflx_surf                  =>    col_wf%qflx_surf               , & ! Input:  [real(r8) (:)   ]  surface runoff (mm H2O /s)
           qflx_qrgwl                 =>    col_wf%qflx_qrgwl              , & ! Input:  [real(r8) (:)   ]  qflx_surf at glaciers, wetlands, lakes
           qflx_drain                 =>    col_wf%qflx_drain              , & ! Input:  [real(r8) (:)   ]  sub-surface runoff (mm H2O /s)
+          qflx_drain_mp              =>    col_wf%qflx_drain_mp           , & ! Input:  [real(r8) (:)   ]  sub-surface runoff from macropores (mm H2O /s)          
           qflx_runoff                =>    col_wf%qflx_runoff             , & ! Input:  [real(r8) (:)   ]  total runoff (mm H2O /s)
           qflx_glcice                =>    col_wf%qflx_glcice             , & ! Input:  [real(r8) (:)   ]  flux of new glacier ice (mm H2O /s) [+ if ice grows]
           qflx_glcice_melt           =>    col_wf%qflx_glcice_melt        , & ! Input:  [real(r8) (:)   ]  ice melt (mm H2O/s)
@@ -1048,7 +1051,7 @@ contains
                  - forc_rain_col(c) - forc_snow_col(c)  - qflx_floodc(c) - qflx_irrig(c) &
                  + qflx_evap_tot(c) + qflx_surf(c)  + qflx_h2osfc_surf(c) &
                  + qflx_qrgwl(c) + qflx_drain(c) + qflx_drain_perched(c) + qflx_snwcp_ice(c) &
-                 + qflx_lateral(c)
+                 + qflx_lateral(c) + qflx_drain_mp(c)
 
          else
 

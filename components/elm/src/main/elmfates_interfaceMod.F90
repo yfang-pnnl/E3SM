@@ -48,6 +48,7 @@ module ELMFatesInterfaceMod
    use elm_varctl        , only : fates_spitfire_mode
    use elm_varctl        , only : fates_parteh_mode
    use elm_varctl        , only : use_fates_planthydro
+   use elm_varctl        , only : use_fates_macropore
    use elm_varctl        , only : use_fates_cohort_age_tracking
    use elm_varctl        , only : use_fates_ed_st3
    use elm_varctl        , only : use_fates_ed_prescribed_phys
@@ -343,6 +344,7 @@ contains
      integer                                        :: pass_ch4
      integer                                        :: pass_ed_prescribed_phys
      integer                                        :: pass_planthydro
+     integer                                        :: pass_macropore
      integer                                        :: pass_inventory_init
      integer                                        :: pass_is_restart
      integer                                        :: pass_cohort_age_tracking
@@ -498,6 +500,13 @@ contains
            pass_planthydro = 0
         end if
         call set_fates_ctrlparms('use_planthydro',ival=pass_planthydro)
+
+        if(use_fates_macropore) then
+           pass_macropore = 1
+        else
+           pass_macropore = 0
+        end if
+        call set_fates_ctrlparms('use_macropore',ival=pass_macropore)
 
         if(use_fates_cohort_age_tracking) then
            pass_cohort_age_tracking = 1
@@ -984,7 +993,7 @@ contains
       ! ---------------------------------------------------------------------------------
       call fates_hist%update_history_dyn( nc,                    &
            this%fates(nc)%nsites, &
-           this%fates(nc)%sites)
+           this%fates(nc)%sites,this%fates(nc)%bc_in)
 
       if (masterproc) then
          write(iulog, *) 'FATES dynamics complete'
@@ -1229,6 +1238,9 @@ contains
           veg_pp%wt_ed(col_pp%pfti(c)) = max(0.0_r8, &
                1.0_r8 - sum(this%fates(nc)%bc_out(s)%canopy_fraction_pa(1:npatch)) )
 
+          if (use_fates_macropore) then
+             col_wf%macropore_frac(c) = this%fates(nc)%bc_out(s)%mp_frac
+          end if
           ! initialize SP mode pft order index to 0.  Below ground is the 0th patch
           veg_pp%sp_pftorder_index(col_pp%pfti(c)) = 0
 
@@ -1621,7 +1633,7 @@ contains
                end do
                call fates_hist%update_history_dyn( nc, &
                     this%fates(nc)%nsites,                 &
-                    this%fates(nc)%sites)
+                    this%fates(nc)%sites,this%fates(nc)%bc_in)
 
 
             end if
@@ -1778,7 +1790,7 @@ contains
            end do
            call fates_hist%update_history_dyn( nc, &
                 this%fates(nc)%nsites,                 &
-                this%fates(nc)%sites)
+                this%fates(nc)%sites,this%fates(nc)%bc_in)
 
 
 

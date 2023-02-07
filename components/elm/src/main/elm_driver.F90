@@ -15,6 +15,7 @@ module elm_driver
   use elm_varctl             , only : wrtdia, iulog, create_glacier_mec_landunit, use_fates, use_betr, use_extrasnowlayers
   use elm_varctl             , only : use_cn, use_lch4, use_voc, use_noio, use_c13, use_c14
   use elm_varctl             , only : use_erosion, use_fates_sp
+  use elm_varctl             , only : use_parflow_via_emi
   use clm_time_manager       , only : get_step_size, get_curr_date, get_ref_date, get_nstep, is_beg_curr_day, get_curr_time_string
   use clm_time_manager       , only : get_curr_calday, get_days_per_year
   use elm_varpar             , only : nlevsno, nlevgrnd, crop_prog
@@ -1283,6 +1284,7 @@ contains
        ! Check the energy and water balance, also carbon and nitrogen balance
        ! ============================================================================
 
+       if (.not.use_parflow_via_emi) then
        call t_startf('balchk')
        call ColWaterBalanceCheck(bounds_clump, &
             filter(nc)%num_do_smb_c, filter(nc)%do_smb_c, &
@@ -1297,6 +1299,7 @@ contains
             energyflux_vars, canopystate_vars              , &
             soilhydrology_vars)
        call t_stopf('gridbalchk')
+       endif
 
        if (do_budgets) then
           call WaterBudget_SetEndingMonthlyStates(bounds_clump)
