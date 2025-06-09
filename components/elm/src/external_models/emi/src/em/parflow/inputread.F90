@@ -1,5 +1,5 @@
 module input_read_module
-#include "petsc/finclude/petscsys.h"
+#include <petsc/finclude/petscsys.h>
   use petscsys
 !
   implicit none

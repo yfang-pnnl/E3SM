@@ -54,6 +54,7 @@ module SoilStateType
      real(r8), pointer :: smpmin_col           (:)   ! col restriction for min of soil potential (mm)
      real(r8), pointer :: bsw_col              (:,:) ! col Clapp and Hornberger "b" (nlevgrnd)
      real(r8), pointer :: watsat_col           (:,:) ! col volumetric soil water at saturation (porosity)
+     real(r8), pointer :: watres_col           (:,:) ! col volumetric soil water at saturation (porosity)
      real(r8), pointer :: watdry_col           (:,:) ! col btran parameter for btran = 0
      real(r8), pointer :: watopt_col           (:,:) ! col btran parameter for btran = 1
      real(r8), pointer :: watfc_col            (:,:) ! col volumetric soil water at field capacity (nlevsoi)
@@ -158,6 +159,7 @@ contains
 
     allocate(this%bsw_col              (begc_all:endc_all,nlevgrnd))    ; this%bsw_col              (:,:) = spval
     allocate(this%watsat_col           (begc_all:endc_all,nlevgrnd))    ; this%watsat_col           (:,:) = spval
+    allocate(this%watres_col           (begc_all:endc_all,nlevgrnd))    ; this%watres_col           (:,:) = spval
     allocate(this%watdry_col           (begc:endc,nlevgrnd))            ; this%watdry_col           (:,:) = spval
     allocate(this%watopt_col           (begc:endc,nlevgrnd))            ; this%watopt_col           (:,:) = spval
     allocate(this%watfc_col            (begc:endc,nlevgrnd))            ; this%watfc_col            (:,:) = spval
@@ -593,6 +595,7 @@ contains
           do lev = 1,nlevgrnd
              this%bsw_col(c,lev)    = spval
              this%watsat_col(c,lev) = spval
+             this%watres_col(c,lev) = spval
              this%watfc_col(c,lev)  = spval
              this%watmin_col(c,lev) = spval
              this%hksat_col(c,lev)  = spval
@@ -625,6 +628,7 @@ contains
           ! Urban Roof, sunwall, shadewall properties set to special value
           do lev = 1,nlevgrnd
              this%watsat_col(c,lev) = spval
+             this%watres_col(c,lev) = spval
              this%watfc_col(c,lev)  = spval
              this%watmin_col(c,lev) = spval
              this%bsw_col(c,lev)    = spval

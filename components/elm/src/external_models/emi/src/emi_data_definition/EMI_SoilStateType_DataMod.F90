@@ -67,6 +67,19 @@ contains
        dim2_end_name  =  dimname_nlevgrnd
        data_found   =  .true.
 
+    case(L2E_PARAMETER_WATRESC)
+       id_val         =  L2E_PARAMETER_WATRESC
+       name_val       =  'Soil porosity'
+       long_name_val  =  'Soil porosity: ELM to EM'
+       units_val      =  '[m^3/m^3]'
+       is_real_type   =  .true.
+       ndim           =  2
+       dim1_beg_name  =  dimname_begc
+       dim1_end_name  =  dimname_endc
+       dim2_beg_name  =  dimname_one
+       dim2_end_name  =  dimname_nlevgrnd
+       data_found   =  .true.
+
     case(L2E_PARAMETER_HKSATC)
        id_val         =  L2E_PARAMETER_HKSATC
        name_val       =  'Soil hydraulic conductivity'
@@ -250,6 +263,19 @@ contains
        data_found   =  .true.
     case(E2L_PARAMETER_WATSATC)
        id_val         =  E2L_PARAMETER_WATSATC
+       name_val       =  'Soil porosity'
+       long_name_val  =  'Soil porosity: EM to ELM'
+       units_val      =  '[m^3/m^3]'
+       is_real_type   =  .true.
+       ndim           =  2
+       dim1_beg_name  =  dimname_begc
+       dim1_end_name  =  dimname_endc
+       dim2_beg_name  =  dimname_one
+       dim2_end_name  =  dimname_nlevgrnd
+       data_found   =  .true.
+
+    case(E2L_PARAMETER_WATRESC)
+       id_val         =  E2L_PARAMETER_WATRESC
        name_val       =  'Soil porosity'
        long_name_val  =  'Soil porosity: EM to ELM'
        units_val      =  '[m^3/m^3]'

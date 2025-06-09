@@ -1,9 +1,9 @@
 module clm_parflow_interface_data
 
-#include "petsc/finclude/petscsys.h"
-#include "petsc/finclude/petscvec.h"
-  use petscsys
+#include <petsc/finclude/petscvec.h>
+#include <petsc/finclude/petscsys.h>
   use petscvec
+  use petscsys
   
   implicit none
 
@@ -20,14 +20,16 @@ module clm_parflow_interface_data
   Vec :: hksat_z_clm
   Vec :: sucsat_clm
   Vec :: watsat_clm
+  Vec :: watres_clm
   Vec :: bsw_clm
   Vec :: hksat_x2_clm
   Vec :: hksat_y2_clm
   Vec :: hksat_z2_clm
   Vec :: sucsat2_clm
   Vec :: watsat2_clm
+  Vec :: watres2_clm
   Vec :: bsw2_clm
-  Vec :: thetares2_clm
+!  Vec :: thetares2_clm
   Vec :: press_clm
 
   ! Local for PARFLOW - seq. vec
@@ -36,14 +38,16 @@ module clm_parflow_interface_data
   Vec :: hksat_z_pf
   Vec :: sucsat_pf
   Vec :: watsat_pf
+  Vec :: watres_pf
   Vec :: bsw_pf
   Vec :: hksat_x2_pf
   Vec :: hksat_y2_pf
   Vec :: hksat_z2_pf
   Vec :: sucsat2_pf
   Vec :: watsat2_pf
+  Vec :: watres2_pf
   Vec :: bsw2_pf
-  Vec :: thetares2_pf
+!  Vec :: thetares2_pf
   Vec :: press_pf
 
   ! (ii) Mesh property
@@ -161,14 +165,16 @@ contains
     clm_pf_idata%hksat_z_clm = PETSC_NULL_VEC
     clm_pf_idata%sucsat_clm = PETSC_NULL_VEC
     clm_pf_idata%watsat_clm = PETSC_NULL_VEC
+    clm_pf_idata%watres_clm = PETSC_NULL_VEC
     clm_pf_idata%bsw_clm = PETSC_NULL_VEC
     clm_pf_idata%hksat_x2_clm = PETSC_NULL_VEC
     clm_pf_idata%hksat_y2_clm = PETSC_NULL_VEC
     clm_pf_idata%hksat_z2_clm = PETSC_NULL_VEC
     clm_pf_idata%sucsat2_clm = PETSC_NULL_VEC
     clm_pf_idata%watsat2_clm = PETSC_NULL_VEC
+    clm_pf_idata%watres2_clm = PETSC_NULL_VEC
     clm_pf_idata%bsw2_clm = PETSC_NULL_VEC
-    clm_pf_idata%thetares2_clm = PETSC_NULL_VEC
+!    clm_pf_idata%thetares2_clm = PETSC_NULL_VEC
     clm_pf_idata%press_clm = PETSC_NULL_VEC
 
     clm_pf_idata%hksat_x_pf = PETSC_NULL_VEC
@@ -176,14 +182,16 @@ contains
     clm_pf_idata%hksat_z_pf = PETSC_NULL_VEC
     clm_pf_idata%sucsat_pf = PETSC_NULL_VEC
     clm_pf_idata%watsat_pf = PETSC_NULL_VEC
+    clm_pf_idata%watres_pf = PETSC_NULL_VEC
     clm_pf_idata%bsw_pf = PETSC_NULL_VEC
     clm_pf_idata%hksat_x2_pf = PETSC_NULL_VEC
     clm_pf_idata%hksat_y2_pf = PETSC_NULL_VEC
     clm_pf_idata%hksat_z2_pf = PETSC_NULL_VEC
     clm_pf_idata%sucsat2_pf = PETSC_NULL_VEC
     clm_pf_idata%watsat2_pf = PETSC_NULL_VEC
+    clm_pf_idata%watres2_pf = PETSC_NULL_VEC
     clm_pf_idata%bsw2_pf = PETSC_NULL_VEC
-    clm_pf_idata%thetares2_pf = PETSC_NULL_VEC
+!    clm_pf_idata%thetares2_pf = PETSC_NULL_VEC
     clm_pf_idata%press_pf = PETSC_NULL_VEC
 
     clm_pf_idata%qflx_clm = PETSC_NULL_VEC
@@ -252,6 +260,7 @@ contains
     call VecDuplicate(clm_pf_idata%hksat_x_clm,clm_pf_idata%hksat_z_clm,ierr)
     call VecDuplicate(clm_pf_idata%hksat_x_clm,clm_pf_idata%sucsat_clm,ierr)
     call VecDuplicate(clm_pf_idata%hksat_x_clm,clm_pf_idata%watsat_clm,ierr)
+    call VecDuplicate(clm_pf_idata%hksat_x_clm,clm_pf_idata%watres_clm,ierr)
     call VecDuplicate(clm_pf_idata%hksat_x_clm,clm_pf_idata%bsw_clm,ierr)
     call VecDuplicate(clm_pf_idata%hksat_x_clm,clm_pf_idata%press_clm,ierr)
     call VecDuplicate(clm_pf_idata%hksat_x_clm,clm_pf_idata%qflx_clm,ierr)
@@ -271,6 +280,7 @@ contains
     call VecDuplicate(clm_pf_idata%hksat_x_pf,clm_pf_idata%hksat_z_pf,ierr)
     call VecDuplicate(clm_pf_idata%hksat_x_pf,clm_pf_idata%sucsat_pf,ierr)
     call VecDuplicate(clm_pf_idata%hksat_x_pf,clm_pf_idata%watsat_pf,ierr)
+    call VecDuplicate(clm_pf_idata%hksat_x_pf,clm_pf_idata%watres_pf,ierr)
     call VecDuplicate(clm_pf_idata%hksat_x_pf,clm_pf_idata%bsw_pf,ierr)
     call VecDuplicate(clm_pf_idata%hksat_x_pf,clm_pf_idata%press_pf,ierr)
     call VecDuplicate(clm_pf_idata%hksat_x_pf,clm_pf_idata%qflx_pf,ierr)
@@ -303,8 +313,9 @@ contains
     call VecDuplicate(clm_pf_idata%sat_pf,clm_pf_idata%hksat_z2_pf,ierr)
     call VecDuplicate(clm_pf_idata%sat_pf,clm_pf_idata%sucsat2_pf,ierr)
     call VecDuplicate(clm_pf_idata%sat_pf,clm_pf_idata%watsat2_pf,ierr)
+    call VecDuplicate(clm_pf_idata%sat_pf,clm_pf_idata%watres2_pf,ierr)
     call VecDuplicate(clm_pf_idata%sat_pf,clm_pf_idata%bsw2_pf,ierr)
-    call VecDuplicate(clm_pf_idata%sat_pf,clm_pf_idata%thetares2_pf,ierr)
+!    call VecDuplicate(clm_pf_idata%sat_pf,clm_pf_idata%thetares2_pf,ierr)
 
     ! 2D Surface PARFLOW ---to--- 2D Surface CLM
     call VecCreateMPI(mycomm,clm_pf_idata%nlpf_srf,PETSC_DECIDE,clm_pf_idata%h2osfc_pf,ierr)
@@ -325,8 +336,9 @@ contains
     call VecDuplicate(clm_pf_idata%sat_clm,clm_pf_idata%hksat_z2_clm,ierr)
     call VecDuplicate(clm_pf_idata%sat_clm,clm_pf_idata%sucsat2_clm,ierr)
     call VecDuplicate(clm_pf_idata%sat_clm,clm_pf_idata%watsat2_clm,ierr)
+    call VecDuplicate(clm_pf_idata%sat_clm,clm_pf_idata%watres2_clm,ierr)
     call VecDuplicate(clm_pf_idata%sat_clm,clm_pf_idata%bsw2_clm,ierr)
-    call VecDuplicate(clm_pf_idata%sat_clm,clm_pf_idata%thetares2_clm,ierr)
+!    call VecDuplicate(clm_pf_idata%sat_clm,clm_pf_idata%thetares2_clm,ierr)
 
     ! 2D Surface PARFLOW ---to--- 2D Surface CLM
     call VecCreateSeq(PETSC_COMM_SELF,clm_pf_idata%nlclm_2dsub,clm_pf_idata%h2osfc_clm,ierr)
@@ -353,14 +365,16 @@ contains
     if(clm_pf_idata%hksat_z_clm       /= PETSC_NULL_VEC) call VecDestroy(clm_pf_idata%hksat_z_clm,ierr)
     if(clm_pf_idata%sucsat_clm        /= PETSC_NULL_VEC) call VecDestroy(clm_pf_idata%sucsat_clm,ierr)
     if(clm_pf_idata%watsat_clm        /= PETSC_NULL_VEC) call VecDestroy(clm_pf_idata%watsat_clm,ierr)
+    if(clm_pf_idata%watres_clm        /= PETSC_NULL_VEC) call VecDestroy(clm_pf_idata%watres_clm,ierr)
     if(clm_pf_idata%bsw_clm           /= PETSC_NULL_VEC) call VecDestroy(clm_pf_idata%bsw_clm,ierr)
     if(clm_pf_idata%hksat_x2_clm      /= PETSC_NULL_VEC) call VecDestroy(clm_pf_idata%hksat_x2_clm,ierr)
     if(clm_pf_idata%hksat_y2_clm      /= PETSC_NULL_VEC) call VecDestroy(clm_pf_idata%hksat_y2_clm,ierr)
     if(clm_pf_idata%hksat_z2_clm      /= PETSC_NULL_VEC) call VecDestroy(clm_pf_idata%hksat_z2_clm,ierr)
     if(clm_pf_idata%sucsat2_clm       /= PETSC_NULL_VEC) call VecDestroy(clm_pf_idata%sucsat2_clm,ierr)
     if(clm_pf_idata%watsat2_clm       /= PETSC_NULL_VEC) call VecDestroy(clm_pf_idata%watsat2_clm,ierr)
+    if(clm_pf_idata%watres2_clm       /= PETSC_NULL_VEC) call VecDestroy(clm_pf_idata%watres2_clm,ierr)
     if(clm_pf_idata%bsw2_clm          /= PETSC_NULL_VEC) call VecDestroy(clm_pf_idata%bsw2_clm,ierr)
-    if(clm_pf_idata%thetares2_clm     /= PETSC_NULL_VEC) call VecDestroy(clm_pf_idata%thetares2_clm,ierr)
+!    if(clm_pf_idata%thetares2_clm     /= PETSC_NULL_VEC) call VecDestroy(clm_pf_idata%thetares2_clm,ierr)
     if(clm_pf_idata%press_clm         /= PETSC_NULL_VEC) call VecDestroy(clm_pf_idata%press_clm,ierr)
 
     if(clm_pf_idata%hksat_x_pf        /= PETSC_NULL_VEC) call VecDestroy(clm_pf_idata%hksat_x_pf,ierr)
@@ -368,14 +382,16 @@ contains
     if(clm_pf_idata%hksat_z_pf        /= PETSC_NULL_VEC) call VecDestroy(clm_pf_idata%hksat_z_pf,ierr)
     if(clm_pf_idata%sucsat_pf         /= PETSC_NULL_VEC) call VecDestroy(clm_pf_idata%sucsat_pf,ierr)
     if(clm_pf_idata%watsat_pf         /= PETSC_NULL_VEC) call VecDestroy(clm_pf_idata%watsat_pf,ierr)
+    if(clm_pf_idata%watres_pf         /= PETSC_NULL_VEC) call VecDestroy(clm_pf_idata%watres_pf,ierr)
     if(clm_pf_idata%bsw_pf            /= PETSC_NULL_VEC) call VecDestroy(clm_pf_idata%bsw_pf,ierr)
     if(clm_pf_idata%hksat_x2_pf       /= PETSC_NULL_VEC) call VecDestroy(clm_pf_idata%hksat_x2_pf,ierr)
     if(clm_pf_idata%hksat_y2_pf       /= PETSC_NULL_VEC) call VecDestroy(clm_pf_idata%hksat_y2_pf,ierr)
     if(clm_pf_idata%hksat_z2_pf       /= PETSC_NULL_VEC) call VecDestroy(clm_pf_idata%hksat_z2_pf,ierr)
     if(clm_pf_idata%sucsat2_pf        /= PETSC_NULL_VEC) call VecDestroy(clm_pf_idata%sucsat2_pf,ierr)
     if(clm_pf_idata%watsat2_pf        /= PETSC_NULL_VEC) call VecDestroy(clm_pf_idata%watsat2_pf,ierr)
+    if(clm_pf_idata%watres2_pf        /= PETSC_NULL_VEC) call VecDestroy(clm_pf_idata%watres2_pf,ierr)
     if(clm_pf_idata%bsw2_pf           /= PETSC_NULL_VEC) call VecDestroy(clm_pf_idata%bsw2_pf,ierr)
-    if(clm_pf_idata%thetares2_pf      /= PETSC_NULL_VEC) call VecDestroy(clm_pf_idata%thetares2_pf,ierr)
+!    if(clm_pf_idata%thetares2_pf      /= PETSC_NULL_VEC) call VecDestroy(clm_pf_idata%thetares2_pf,ierr)
     if(clm_pf_idata%press_pf          /= PETSC_NULL_VEC) call VecDestroy(clm_pf_idata%press_pf,ierr)
 
     if(clm_pf_idata%qflx_clm          /= PETSC_NULL_VEC) call VecDestroy(clm_pf_idata%qflx_clm,ierr)

@@ -24,4 +24,7 @@ module EMI_SoilStateType_Constants
   integer, parameter, public :: E2L_PARAMETER_BSWC               = 1518
   integer, parameter, public :: E2L_PARAMETER_SUCSATC            = 1519
 
+  integer, parameter, public :: L2E_PARAMETER_WATRESC            = 1520
+  integer, parameter, public :: E2L_PARAMETER_WATRESC            = 1521
+
 end module EMI_SoilStateType_Constants

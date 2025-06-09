@@ -47,6 +47,7 @@ module ELMFatesInterfaceMod
    use elm_varctl        , only : use_vertsoilc
    use elm_varctl        , only : fates_spitfire_mode
    use elm_varctl        , only : fates_parteh_mode
+   use elm_varctl        , only : use_emi_parflow_vangenuchten
    use elm_varctl        , only : use_fates_planthydro
    use elm_varctl        , only : use_fates_macropore
    use elm_varctl        , only : use_fates_cohort_age_tracking
@@ -930,9 +931,15 @@ contains
          if(use_fates_planthydro)then
             this%fates(nc)%bc_in(s)%hksat_sisl(1:nlevsoil)  = soilstate_inst%hksat_col(c,1:nlevsoil)
             this%fates(nc)%bc_in(s)%watsat_sisl(1:nlevsoil) = soilstate_inst%watsat_col(c,1:nlevsoil)
-            this%fates(nc)%bc_in(s)%watres_sisl(1:nlevsoil) = soilstate_inst%watmin_col(c,1:nlevsoil)
-            this%fates(nc)%bc_in(s)%sucsat_sisl(1:nlevsoil) = soilstate_inst%sucsat_col(c,1:nlevsoil)
-            this%fates(nc)%bc_in(s)%bsw_sisl(1:nlevsoil)    = soilstate_inst%bsw_col(c,1:nlevsoil)
+            if(use_emi_parflow_vangenuchten) then
+              this%fates(nc)%bc_in(s)%watres_sisl(1:nlevsoil) = soilstate_inst%watmin_col(c,1:nlevsoil)
+              this%fates(nc)%bc_in(s)%bsw_sisl(1:nlevsoil)    = 1.0_r8/soilstate_inst%bsw_col(c,1:nlevsoil) !n parameter
+              this%fates(nc)%bc_in(s)%sucsat_sisl(1:nlevsoil) = 1.0e-6_r8*soilstate_inst%sucsat_col(c,1:nlevsoil) !convert to 1/mm, it was processed to have the correct number
+            else
+              this%fates(nc)%bc_in(s)%watres_sisl(1:nlevsoil) = soilstate_inst%watmin_col(c,1:nlevsoil)
+              this%fates(nc)%bc_in(s)%bsw_sisl(1:nlevsoil)    = soilstate_inst%bsw_col(c,1:nlevsoil)
+              this%fates(nc)%bc_in(s)%sucsat_sisl(1:nlevsoil) = soilstate_inst%sucsat_col(c,1:nlevsoil)
+            endif
             this%fates(nc)%bc_in(s)%h2o_liq_sisl(1:nlevsoil) =  col_ws%h2osoi_liq(c,1:nlevsoil)
          end if
 
@@ -1422,6 +1429,7 @@ contains
             end do
 
          end do
+print *,'fates_maxElementsPerSite-----err--',fates_maxElementsPerSite
          !$OMP END PARALLEL DO
 
          ! ------------------------------------------------------------------------------------
@@ -1495,11 +1503,12 @@ contains
                     data=this%fates_restart%rvars(ivar)%int1d,readvar=readvar)
 
            case(site_int)
-
+print *,'---err--',vname,vlong
               call restartvar(ncid=ncid, flag=flag, varname=trim(vname), &
                     xtype=ncd_int,dim1name=trim('column'),long_name=trim(vlong), &
                     units=trim(vunits),interpinic_flag='interp', &
                     data=this%fates_restart%rvars(ivar)%int1d,readvar=readvar)
+print *,'after---err--',vname,'-',vlong
 
            case default
               write(iulog,*) 'A FATES iotype was created that was not registerred'
@@ -1586,15 +1595,23 @@ contains
 
                      this%fates(nc)%bc_in(s)%watsat_sisl(1:nlevsoil) = &
                           soilstate_inst%watsat_col(c,1:nlevsoil)
-
-                     this%fates(nc)%bc_in(s)%watres_sisl(1:nlevsoil) = &
+                     if(use_emi_parflow_vangenuchten) then
+                       this%fates(nc)%bc_in(s)%watres_sisl(1:nlevsoil) = &
+                          soilstate_inst%watres_col(c,1:nlevsoil)
+                       this%fates(nc)%bc_in(s)%bsw_sisl(1:nlevsoil) = &
+                          1.0_r8/soilstate_inst%bsw_col(c,1:nlevsoil)
+                       this%fates(nc)%bc_in(s)%sucsat_sisl(1:nlevsoil) = &
+                          1.e-6_r8*soilstate_inst%sucsat_col(c,1:nlevsoil)
+                     else
+                       this%fates(nc)%bc_in(s)%watres_sisl(1:nlevsoil) = &
                           soilstate_inst%watmin_col(c,1:nlevsoil)
-
-                     this%fates(nc)%bc_in(s)%sucsat_sisl(1:nlevsoil) = &
-                          soilstate_inst%sucsat_col(c,1:nlevsoil)
-
-                     this%fates(nc)%bc_in(s)%bsw_sisl(1:nlevsoil) = &
+                       this%fates(nc)%bc_in(s)%bsw_sisl(1:nlevsoil) = &
                           soilstate_inst%bsw_col(c,1:nlevsoil)
+                       this%fates(nc)%bc_in(s)%sucsat_sisl(1:nlevsoil) = &
+                          soilstate_inst%sucsat_col(c,1:nlevsoil)
+                     endif
+
+
 
                      this%fates(nc)%bc_in(s)%h2o_liq_sisl(1:nlevsoil) = &
                           col_ws%h2osoi_liq(c,1:nlevsoil)
@@ -1724,15 +1741,23 @@ contains
 
                  this%fates(nc)%bc_in(s)%watsat_sisl(1:nlevsoil) = &
                       soilstate_inst%watsat_col(c,1:nlevsoil)
-
-                 this%fates(nc)%bc_in(s)%watres_sisl(1:nlevsoil) = &
+                 if(use_emi_parflow_vangenuchten) then
+                   this%fates(nc)%bc_in(s)%watres_sisl(1:nlevsoil) = &
+                      soilstate_inst%watres_col(c,1:nlevsoil)
+                   this%fates(nc)%bc_in(s)%bsw_sisl(1:nlevsoil) = &
+                      1.0_r8/soilstate_inst%bsw_col(c,1:nlevsoil)
+                   this%fates(nc)%bc_in(s)%sucsat_sisl(1:nlevsoil) = &
+                      1.e-6_r8*soilstate_inst%sucsat_col(c,1:nlevsoil)
+                 else
+                   this%fates(nc)%bc_in(s)%watres_sisl(1:nlevsoil) = &
                       soilstate_inst%watmin_col(c,1:nlevsoil)
-
-                 this%fates(nc)%bc_in(s)%sucsat_sisl(1:nlevsoil) = &
+                   this%fates(nc)%bc_in(s)%bsw_sisl(1:nlevsoil) = &
+                      soilstate_inst%bsw_col(c,1:nlevsoil)
+                   this%fates(nc)%bc_in(s)%sucsat_sisl(1:nlevsoil) = &
                       soilstate_inst%sucsat_col(c,1:nlevsoil)
 
-                 this%fates(nc)%bc_in(s)%bsw_sisl(1:nlevsoil) = &
-                      soilstate_inst%bsw_col(c,1:nlevsoil)
+                 endif
+
 
                  this%fates(nc)%bc_in(s)%h2o_liq_sisl(1:nlevsoil) = &
                       col_ws%h2osoi_liq(c,1:nlevsoil)
@@ -1966,6 +1991,7 @@ contains
       associate(&
          sucsat      => soilstate_inst%sucsat_col           , & ! Input:  [real(r8) (:,:) ]  minimum soil suction (mm)
          watsat      => soilstate_inst%watsat_col           , & ! Input:  [real(r8) (:,:) ]  volumetric soil water at saturation (porosity)
+         watres         => soilstate_inst%watres_col              , & ! Input:  [real(r8) (:,:) ]  Clapp and Hornberger "b"
          bsw         => soilstate_inst%bsw_col              , & ! Input:  [real(r8) (:,:) ]  Clapp and Hornberger "b"
          eff_porosity => soilstate_inst%eff_porosity_col    , & ! Input:  [real(r8) (:,:) ]  effective porosity = porosity - vol_ice
          t_soisno     => col_es%t_soisno                    , & ! Input:  [real(r8) (:,:) ]  soil temperature (Kelvin)
@@ -2010,6 +2036,7 @@ contains
                  this%fates(nc)%bc_in(s)%h2o_liqvol_sl(j)    = h2osoi_liqvol(c,j)
                  this%fates(nc)%bc_in(s)%eff_porosity_sl(j)  = eff_porosity(c,j)
                  this%fates(nc)%bc_in(s)%watsat_sl(j)        = watsat(c,j)
+!                 this%fates(nc)%bc_in(s)%watres_sl(j)        = watres(c,j)
               end do
 
            else
@@ -2018,6 +2045,7 @@ contains
               this%fates(nc)%bc_in(s)%h2o_liqvol_sl(:)    = -999._r8
               this%fates(nc)%bc_in(s)%eff_porosity_sl(:)  = -999._r8
               this%fates(nc)%bc_in(s)%watsat_sl(:)        = -999._r8
+!              this%fates(nc)%bc_in(s)%watres_sl(:)        = -999._r8
            end if
 
         end do
@@ -2046,11 +2074,20 @@ contains
 
            do j = 1,nlevsoil
               if(this%fates(nc)%bc_out(s)%active_suction_sl(j)) then
-                 s_node = max(h2osoi_liqvol(c,j)/eff_porosity(c,j),0.01_r8)
-                 call soil_water_retention_curve%soil_suction( soilstate_inst%sucsat_col(c,j), &
+                 if(use_emi_parflow_vangenuchten) then
+                   s_node = max((h2osoi_liqvol(c,j)-soilstate_inst%watres_col(c,j)) &
+                      / (soilstate_inst%watsat_col(c,j)-soilstate_inst%watres_col(c,j)),0.01_r8)
+                   call soil_water_retention_curve%soil_suction( soilstate_inst%sucsat_col(c,j), &
                        s_node, &
                        soilstate_inst%bsw_col(c,j), &
                        smp_node)
+                 else
+                   s_node = max(h2osoi_liqvol(c,j)/eff_porosity(c,j),0.01_r8)
+                   call soil_water_retention_curve%soil_suction( soilstate_inst%sucsat_col(c,j), &
+                       s_node, &
+                       soilstate_inst%bsw_col(c,j), &
+                       smp_node)
+                 endif
 
                  ! Non-fates places a maximum (which is a negative upper bound) on smp
 
@@ -2771,12 +2808,21 @@ end subroutine wrap_update_hifrq_hist
             soilstate_inst%smpmin_col(c)
       this%fates(nc)%bc_in(s)%watsat_sisl(1:nlevsoil)    = &
             soilstate_inst%watsat_col(c,1:nlevsoil)
-      this%fates(nc)%bc_in(s)%watres_sisl(1:nlevsoil)    = &
+      if(use_emi_parflow_vangenuchten) then
+        this%fates(nc)%bc_in(s)%watres_sisl(1:nlevsoil)    = &
+           soilstate_inst%watres_col(c,1:nlevsoil)
+        this%fates(nc)%bc_in(s)%bsw_sisl(1:nlevsoil)        = &
+            1.0_r8/soilstate_inst%bsw_col(c,1:nlevsoil)
+        this%fates(nc)%bc_in(s)%sucsat_sisl(1:nlevsoil)     = &
+            1.e-6_r8*soilstate_inst%sucsat_col(c,1:nlevsoil)
+      else
+        this%fates(nc)%bc_in(s)%watres_sisl(1:nlevsoil)    = &
            soilstate_inst%watmin_col(c,1:nlevsoil)
-      this%fates(nc)%bc_in(s)%sucsat_sisl(1:nlevsoil)     = &
-            soilstate_inst%sucsat_col(c,1:nlevsoil)
-      this%fates(nc)%bc_in(s)%bsw_sisl(1:nlevsoil)        = &
+        this%fates(nc)%bc_in(s)%bsw_sisl(1:nlevsoil)        = &
             soilstate_inst%bsw_col(c,1:nlevsoil)
+        this%fates(nc)%bc_in(s)%sucsat_sisl(1:nlevsoil)     = &
+            soilstate_inst%sucsat_col(c,1:nlevsoil)
+      endif
       this%fates(nc)%bc_in(s)%h2o_liq_sisl(1:nlevsoil)    = &
             col_ws%h2osoi_liq(c,1:nlevsoil)
       this%fates(nc)%bc_in(s)%eff_porosity_sl(1:nlevsoil) = &

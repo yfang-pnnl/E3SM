@@ -57,6 +57,7 @@ contains
 
     associate(& 
          watsat       => soilstate_vars%watsat_col       , &
+         watres       => soilstate_vars%watres_col       , &
          hksat        => soilstate_vars%hksat_col        , &
          bsw          => soilstate_vars%bsw_col          , &
          sucsat       => soilstate_vars%sucsat_col       , &
@@ -94,6 +95,15 @@ contains
                 c = filter(fc)
                 do j = 1, nlevgrnd
                    cur_data%data_real_2d(c,j) = watsat(c,j)
+                enddo
+             enddo
+             cur_data%is_set = .true.
+
+          case (L2E_PARAMETER_WATRESC)
+             do fc = 1, num_filter
+                c = filter(fc)
+                do j = 1, nlevgrnd
+                   cur_data%data_real_2d(c,j) = watres(c,j)
                 enddo
              enddo
              cur_data%is_set = .true.
@@ -314,6 +324,7 @@ contains
     associate(& 
          smp_l => soilstate_vars%smp_l_col ,  &
          watsat => soilstate_vars%watsat_col , &
+         watres => soilstate_vars%watres_col , &
          hksat  => soilstate_vars%hksat_col  , &
          bsw    => soilstate_vars%bsw_col    , &
          sucsat => soilstate_vars%sucsat_col   &
@@ -351,6 +362,15 @@ contains
                 c = filter(fc)
                 do j = 1, nlevgrnd
                    watsat(c,j) = cur_data%data_real_2d(c,j)
+                enddo
+             enddo
+             cur_data%is_set = .true.
+
+          case (E2L_PARAMETER_WATRESC)
+             do fc = 1, num_filter
+                c = filter(fc)
+                do j = 1, nlevgrnd
+                   watres(c,j) = cur_data%data_real_2d(c,j)
                 enddo
              enddo
              cur_data%is_set = .true.

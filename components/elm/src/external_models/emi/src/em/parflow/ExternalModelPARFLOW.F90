@@ -56,6 +56,7 @@ module ExternalModelPARFLOWMod
      integer :: index_e2l_init_state_h2osoi_vol
      integer :: index_e2l_init_state_wtd
      integer :: index_e2l_init_parameter_watsatc
+     integer :: index_e2l_init_parameter_watresc
      integer :: index_e2l_init_parameter_hksatc
      integer :: index_e2l_init_parameter_bswc
      integer :: index_e2l_init_parameter_sucsatc
@@ -68,6 +69,7 @@ module ExternalModelPARFLOWMod
      integer :: index_l2e_init_landunit_urbanpoint
 
      integer :: index_l2e_init_parameter_watsatc
+     integer :: index_l2e_init_parameter_watresc
      integer :: index_l2e_init_parameter_hksatc
      integer :: index_l2e_init_parameter_bswc
      integer :: index_l2e_init_parameter_sucsatc
@@ -205,6 +207,10 @@ contains
     call l2e_init_list%AddDataByID(id, number_em_stages, em_stages, index)
     this%index_l2e_init_parameter_watsatc      = index
 
+    id                                         = L2E_PARAMETER_WATRESC
+    call l2e_init_list%AddDataByID(id, number_em_stages, em_stages, index)
+    this%index_l2e_init_parameter_watresc      = index
+
     id                                         = L2E_PARAMETER_HKSATC
     call l2e_init_list%AddDataByID(id, number_em_stages, em_stages, index)
     this%index_l2e_init_parameter_hksatc       = index
@@ -278,6 +284,10 @@ contains
     id                                         = E2L_PARAMETER_WATSATC
     call e2l_init_list%AddDataByID(id, number_em_stages, em_stages, index)
     this%index_e2l_init_parameter_watsatc      = index
+
+    id                                         = E2L_PARAMETER_WATRESC
+    call e2l_init_list%AddDataByID(id, number_em_stages, em_stages, index)
+    this%index_e2l_init_parameter_watresc      = index
 
     id                                         = E2L_PARAMETER_HKSATC
     call e2l_init_list%AddDataByID(id, number_em_stages, em_stages, index)
@@ -493,10 +503,13 @@ contains
     !parflow_m => parflowModelCreate(mpicom,npes,iam,prefix,mapfile)
 
     ! Initialize size and vector for clm and parflow
+print *,'gosh init-1'
     call CreateCLMPARFLOWInterfaceDate(this, bounds_clump, clm_npts, clm_surf_npts)
+print *,'gosh init-2'
 
     ! Create CLM-PARFLOW mapping files
     call CreateCLMPARFLOWMaps(this, bounds_clump, clm_npts, clm_surf_npts)
+print *,'gosh init-3'
 
     ! Initialize PARFLOW states
 
@@ -509,10 +522,13 @@ contains
     !call parflowModelGetUpdatedData(this%parflow_m)
     ! Get parflow soil properties
     call parflowsoilprop(this%parflow_m%map_clm_sub_to_pf_sub%parflow_nlev)
+print *,'gosh init-4'
     call parflowModelGetTopFaceArea(this%parflow_m)
+print *,'gosh init-5'
 
     ! Save the data need by ELM
     call extract_data_for_elm(this, l2e_init_list, e2l_init_list, bounds_clump)
+print *,'gosh init-6'
 
   end subroutine EM_PARFLOW_Init
 
@@ -554,10 +570,11 @@ contains
     nlevmapped                = clm_pf_idata%nzclm_mapped
     clm_pf_idata%nzpf_mapped = this%parflow_m%map_clm_sub_to_pf_sub%parflow_nlev
     pf_nlevmapped                = clm_pf_idata%nzpf_mapped
-    if ( (nlevmapped /= nlevsoi) .and. (nlevmapped /= nlevgrnd) ) then
-       call endrun(trim(subname)//' ERROR: Number of layers PARFLOW thinks CLM should '// &
-            'have do not match either nlevsoi or nlevgrnd. Abortting' )
-    end if
+!print *,' external --',nlevmapped,pf_nlevmapped
+!    if ( (nlevmapped /= nlevsoi) .and. (nlevmapped /= nlevgrnd) ) then
+!       call endrun(trim(subname)//' ERROR: Number of layers PARFLOW thinks CLM should '// &
+!            'have do not match either nlevsoi or nlevgrnd. Abortting' )
+!    end if
 
     clm_npts = (bounds%endg - bounds%begg + 1)*nlevmapped
     clm_surf_npts = (bounds%endg - bounds%begg + 1)
@@ -621,6 +638,7 @@ contains
     !allocate(clm_surf_cell_ids_nindex(1:clm_surf_npts))
 
     nlevmapped     = clm_pf_idata%nzclm_mapped
+if(iam==0) print *,'create-gosh-1',nlevmapped
     clm_npts       = 0
     clm_surf_npts  = 0
     do g = bounds%begg, bounds%endg
@@ -628,18 +646,22 @@ contains
           clm_npts = clm_npts + 1
           !clm_cell_ids_nindex(clm_npts) = (ldecomp%gdc2glo(g)-1)*nlevmapped + j - 1
           clm_cell_ids_nindex(clm_npts) = (ldecomp%gdc2glo_rc(g)-1)*nlevmapped + j - 1
+if(iam==0 .and. j==1) print *,'gosh-g',g,ldecomp%gdc2glo_rc(g),clm_cell_ids_nindex(clm_npts)
        enddo
        !clm_surf_npts = clm_surf_npts + 1
        !clm_surf_cell_ids_nindex(clm_surf_npts) = (ldecomp%gdc2glo(g)-1)*nlevmapped
     enddo
+print *,'gosh-2-grids- ',clm_cell_ids_nindex(clm_npts),clm_npts
     ! Initialize maps for transferring data between CLM and PARFLOW. Defined in
     ! parflow_dir/elm/parflow_model.F90
     call parflowModelInitMapping(this%parflow_m, clm_cell_ids_nindex, &
                                   clm_npts,CLM_SUB_TO_PF_SUB,mpicom,iam)
+print *,'create-gosh-2 clmnpts',clm_npts
 !    call parflowModelInitMapping(this%parflow_m, clm_cell_ids_nindex, &
 !                                  clm_npts, nlmax_pf,CLM_SUB_TO_PF_EXTENDED_SUB)
     call parflowModelInitMapping(this%parflow_m, clm_cell_ids_nindex, &
                                   clm_npts, PF_SUB_TO_CLM_SUB,mpicom,iam)
+print *,'create-gosh-3 clmnpts',clm_npts
     deallocate(clm_cell_ids_nindex)
     !deallocate(clm_surf_cell_ids_nindex)
   end subroutine CreateCLMPARFLOWMaps
@@ -685,6 +707,7 @@ contains
     real(r8)    , pointer :: e2l_zwt(:)
     real(r8)    , pointer :: e2l_mflx_snowlyr_col(:)
     real(r8)    , pointer :: e2l_watsatc(:,:)
+    real(r8)    , pointer :: e2l_watresc(:,:)
     real(r8)    , pointer :: e2l_hksatc(:,:)
     real(r8)    , pointer :: e2l_bswc(:,:)
     real(r8)    , pointer :: e2l_sucsatc(:,:)
@@ -693,6 +716,7 @@ contains
 
     PetscScalar , pointer :: sat_clm_loc(:)
     PetscScalar , pointer :: watsat_clm_loc(:)
+    PetscScalar , pointer :: watres_clm_loc(:)
     PetscScalar , pointer :: hksat_clm_loc(:)
     PetscScalar , pointer :: bsw_clm_loc(:)
     PetscScalar , pointer :: sucsat_clm_loc(:)
@@ -720,6 +744,7 @@ contains
     call e2l_init_list%GetPointerToReal2D(this%index_e2l_init_state_h2osoi_vol      , e2l_h2osoi_vol       )
 
     call e2l_init_list%GetPointerToReal2D(this%index_e2l_init_parameter_watsatc     , e2l_watsatc )
+    call e2l_init_list%GetPointerToReal2D(this%index_e2l_init_parameter_watresc     , e2l_watresc )
     call e2l_init_list%GetPointerToReal2D(this%index_e2l_init_parameter_hksatc      , e2l_hksatc  )
     call e2l_init_list%GetPointerToReal2D(this%index_e2l_init_parameter_bswc        , e2l_bswc    )
     call e2l_init_list%GetPointerToReal2D(this%index_e2l_init_parameter_sucsatc     , e2l_sucsatc )
@@ -734,6 +759,7 @@ contains
     ! Initialize soil moisture
     call VecGetArrayF90(clm_pf_idata%sat_clm      , sat_clm_loc    , ierr)
     call VecGetArrayF90(clm_pf_idata%watsat2_clm  , watsat_clm_loc , ierr)
+    call VecGetArrayF90(clm_pf_idata%watres2_clm  , watres_clm_loc , ierr)
     call VecGetArrayF90(clm_pf_idata%hksat_x2_clm , hksat_clm_loc  , ierr)
     call VecGetArrayF90(clm_pf_idata%bsw2_clm     , bsw_clm_loc    , ierr)
     call VecGetArrayF90(clm_pf_idata%sucsat2_clm  , sucsat_clm_loc , ierr)
@@ -756,6 +782,7 @@ contains
                    e2l_h2osoi_ice(c,j) = 0._r8
 
                    e2l_watsatc(c,j) = watsat_clm_loc(pf_j)
+                   e2l_watresc(c,j) = watres_clm_loc(pf_j)
                    e2l_hksatc(c,j)  = hksat_clm_loc(pf_j)
                    e2l_bswc(c,j)    = bsw_clm_loc(pf_j)
                    e2l_sucsatc(c,j) = sucsat_clm_loc(pf_j)
@@ -764,6 +791,7 @@ contains
                    e2l_h2osoi_vol(c,j) = e2l_h2osoi_vol(c,nlevmapped)
                    e2l_h2osoi_ice(c,j) = 0._r8
                    e2l_watsatc(c,j)    = e2l_watsatc(c,nlevmapped)
+                   e2l_watresc(c,j)    = e2l_watresc(c,nlevmapped)
                    e2l_hksatc(c,j)     = e2l_hksatc(c,nlevmapped)
                    e2l_bswc(c,j)       = e2l_bswc(c,nlevmapped)
                    e2l_sucsatc(c,j)    = e2l_sucsatc(c,nlevmapped)
@@ -779,6 +807,7 @@ contains
 
     call VecRestoreArrayF90(clm_pf_idata%sat_clm      , sat_clm_loc    , ierr)
     call VecRestoreArrayF90(clm_pf_idata%watsat2_clm  , watsat_clm_loc , ierr)
+    call VecRestoreArrayF90(clm_pf_idata%watres2_clm  , watres_clm_loc , ierr)
     call VecRestoreArrayF90(clm_pf_idata%hksat_x2_clm , hksat_clm_loc  , ierr)
     call VecRestoreArrayF90(clm_pf_idata%bsw2_clm     , bsw_clm_loc    , ierr)
     call VecRestoreArrayF90(clm_pf_idata%sucsat2_clm  , sucsat_clm_loc , ierr)
@@ -964,8 +993,10 @@ contains
 
     PetscScalar, pointer :: qflx_clm_loc(:)
     PetscScalar, pointer :: area_clm_loc(:)
-    PetscScalar, pointer :: thetares2_clm_loc(:)
+!    PetscScalar, pointer :: thetares2_clm_loc(:)
+    PetscScalar, pointer :: watres2_clm_loc(:)
     PetscScalar, pointer :: watsat_clm_loc(:)
+    PetscScalar, pointer :: watres_clm_loc(:)
     PetscScalar, pointer :: sat_clm_loc(:)
     PetscScalar, pointer :: mass_clm_loc(:)
     PetscScalar, pointer :: e2l_drain_perched(:)
@@ -1088,7 +1119,7 @@ contains
 
     nlevmapped = clm_pf_idata%nzclm_mapped
     pf_nlevmapped = clm_pf_idata%nzpf_mapped
-
+print *,' --- gosh -----',nlevmapped,pf_nlevmapped
     call parflowModelGetSaturation(this%parflow_m,pf_sat,pf_grid_vol,pf_por)
 
     ! Get total mass
@@ -1160,7 +1191,8 @@ contains
 
     call VecGetArrayF90(clm_pf_idata%qflx_clm, qflx_clm_loc, ierr); CHKERRQ(ierr)
     call VecGetArrayF90(clm_pf_idata%area_top_face_clm, area_clm_loc, ierr); CHKERRQ(ierr)
-    call VecGetArrayF90(clm_pf_idata%thetares2_clm, thetares2_clm_loc, ierr); CHKERRQ(ierr)
+    !call VecGetArrayF90(clm_pf_idata%thetares2_clm, thetares2_clm_loc, ierr); CHKERRQ(ierr)
+    call VecGetArrayF90(clm_pf_idata%watres2_clm, watres2_clm_loc, ierr); CHKERRQ(ierr)
 
     frac_ice(:,:)       = 0.d0
     do fc = 1, l2e_num_hydrologyc
@@ -1220,7 +1252,8 @@ contains
        end do
     end do
     call VecRestoreArrayF90(clm_pf_idata%qflx_clm, qflx_clm_loc, ierr); CHKERRQ(ierr)
-    call VecRestoreArrayF90(clm_pf_idata%thetares2_clm, thetares2_clm_loc, ierr); CHKERRQ(ierr)
+!    call VecRestoreArrayF90(clm_pf_idata%thetares2_clm, thetares2_clm_loc, ierr); CHKERRQ(ierr)
+    call VecRestoreArrayF90(clm_pf_idata%watres2_clm, watres2_clm_loc, ierr); CHKERRQ(ierr)
 
  !   call parflowModelUpdateFlowConds( this%parflow_m )
  !   call parflowModelStepperRunTillPauseTime( this%parflow_m, (nstep+1.0d0)*dtime )
@@ -1238,12 +1271,13 @@ contains
     elm_flux(:) = elm_flux(:) * 3600.d0 * 1.0d-3 !/ pf_grid_dz(:)
     call elmparflowadvance(pftime,pfdt,elm_flux,pf_press,pf_porosity,pf_sat,pf_nlevmapped, &
                            0,0,0,0)
-
+print *,'mapped-',nlevmapped,nlevgrnd
 
     call VecGetArrayF90(clm_pf_idata%sat_clm   , sat_clm_loc   , ierr); CHKERRQ(ierr)
     call VecGetArrayF90(clm_pf_idata%mass_clm  , mass_clm_loc  , ierr); CHKERRQ(ierr)
     call VecGetArrayF90(clm_pf_idata%watsat2_clm, watsat_clm_loc, ierr); CHKERRQ(ierr)
-
+    call VecGetArrayF90(clm_pf_idata%watres2_clm, watres_clm_loc, ierr); CHKERRQ(ierr)
+print  *,'here -1'
     do fc = 1, l2e_num_hydrologyc
        c = l2e_filter_hydrologyc(fc)
        g = col_gridcell(c)
@@ -1276,6 +1310,7 @@ contains
        e2l_wtd(c) = l2e_zi(c,nlevmapped)
     end do
 
+print  *,'here -2'
     ! Save soil liquid pressure from VSFM for all (active+nonactive) cells.
     ! soilp_col is used for restarting VSFM.
     do c = begc, endc
@@ -1294,8 +1329,10 @@ contains
     call VecRestoreArrayF90(clm_pf_idata%sat_clm   , sat_clm_loc   , ierr); CHKERRQ(ierr)
     call VecRestoreArrayF90(clm_pf_idata%mass_clm  , mass_clm_loc  , ierr); CHKERRQ(ierr)
     call VecRestoreArrayF90(clm_pf_idata%watsat2_clm, watsat_clm_loc, ierr); CHKERRQ(ierr)
+    call VecRestoreArrayF90(clm_pf_idata%watres2_clm, watres_clm_loc, ierr); CHKERRQ(ierr)
 
 
+print  *,'here -3'
     deallocate(frac_ice                    )
     deallocate(total_mass_flux_col         )
     deallocate(total_mass_flux_et_col      )

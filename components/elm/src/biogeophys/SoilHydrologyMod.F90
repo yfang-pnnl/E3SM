@@ -216,6 +216,7 @@ contains
       ! Excess goes to surface runoff. No surface runoff for sunwall and shadewall.
 
       if( .not. use_parflow_via_emi ) then
+print *,'gosh---1'
       do fc = 1, num_urbanc
          c = filter_urbanc(fc)
          if (col_pp%itype(c) == icol_roof .or. col_pp%itype(c) == icol_road_imperv) then
@@ -581,6 +582,7 @@ contains
              qflx_h2osfc_surf(c) = 0._r8
           endif
           else
+print *,'gosh---2'
 ! parflow
 !#endif
 !Fang test

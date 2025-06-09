@@ -142,7 +142,7 @@ contains
     ig = 0
     nlev_ = model%map_clm_sub_to_pf_sub%parflow_nlev 
     call elmparflowadvance(cur_time,cur_dt,elm_flux,pf_press,pf_por,pf_sat,nlev_, ig,ig,ig,ig)
-!print *,'complete advancing---'
+print *,'complete advancing---'
 !stop
     !assign model to output
     parflowModelCreate => model
@@ -337,6 +337,7 @@ end subroutine parflowModelSetICs
     PetscScalar, pointer :: hksat_y_pf_loc(:) ! hydraulic conductivity in y-dir at saturation (mm h2o /s)
     PetscScalar, pointer :: hksat_z_pf_loc(:) ! hydraulic conductivity in z-dir at saturation (mm h2o /s)
     PetscScalar, pointer :: watsat_pf_loc(:)  ! minimum soil suction (mm)
+    PetscScalar, pointer :: watres_pf_loc(:)  ! minimum soil suction (mm)
     PetscScalar, pointer :: sucsat_pf_loc(:)  ! volumetric soil water at saturation (porosity)
     PetscScalar, pointer :: bsw_pf_loc(:)     ! clapp and hornberger "b"
 
@@ -377,9 +378,10 @@ end subroutine parflowModelSetICs
     PetscScalar, pointer :: hksat_y2_pf_loc(:) ! hydraulic conductivity in y-dir at saturation (mm H2O /s)
     PetscScalar, pointer :: hksat_z2_pf_loc(:) ! hydraulic conductivity in z-dir at saturation (mm H2O /s)
     PetscScalar, pointer :: watsat2_pf_loc(:)  ! minimum soil suction (mm)
+    PetscScalar, pointer :: watres2_pf_loc(:)  ! minimum soil suction (mm)
     PetscScalar, pointer :: sucsat2_pf_loc(:)  ! volumetric soil water at saturation (porosity)
     PetscScalar, pointer :: bsw2_pf_loc(:)     ! Clapp and Hornberger "b"
-    PetscScalar, pointer :: thetares2_pf_loc(:)! residual soil mosture = sat_res * por
+!    PetscScalar, pointer :: thetares2_pf_loc(:)! residual soil mosture = sat_res * por
 
     den = 998.2d0       ! [kg/m^3]  @ 20 degC
     vis = 0.001002d0    ! [N s/m^2] @ 20 degC
@@ -390,8 +392,9 @@ end subroutine parflowModelSetICs
     call VecGetArrayF90(clm_pf_idata%hksat_z2_pf, hksat_z2_pf_loc, ierr)
     call VecGetArrayF90(clm_pf_idata%sucsat2_pf,  sucsat2_pf_loc,  ierr)
     call VecGetArrayF90(clm_pf_idata%watsat2_pf,  watsat2_pf_loc,  ierr)
+    call VecGetArrayF90(clm_pf_idata%watres2_pf,  watres2_pf_loc,  ierr)
     call VecGetArrayF90(clm_pf_idata%bsw2_pf,     bsw2_pf_loc,     ierr)
-    call VecGetArrayF90(clm_pf_idata%thetares2_pf,thetares2_pf_loc,ierr)
+!    call VecGetArrayF90(clm_pf_idata%thetares2_pf,thetares2_pf_loc,ierr)
 
 
     hksat_x2_pf_loc(:) = 0.d0
@@ -399,8 +402,9 @@ end subroutine parflowModelSetICs
     hksat_z2_pf_loc(:) = 0.d0
     sucsat2_pf_loc(:) = 0.d0
     watsat2_pf_loc(:) = 0.d0
+    watres2_pf_loc(:) = 0.d0
     bsw2_pf_loc(:) = 0.d0
-    thetares2_pf_loc(:) = 0.d0
+!    thetares2_pf_loc(:) = 0.d0
 
     do ghosted_id = 1, pf_num_nodes
 
@@ -421,7 +425,8 @@ end subroutine parflowModelSetICs
       watsat2_pf_loc(local_id) = pf_porosity(ghosted_id)
 
 
-      thetares2_pf_loc(local_id) = pf_porosity(ghosted_id)*pf_sr(ghosted_id)
+!      thetares2_pf_loc(local_id) = pf_porosity(ghosted_id)*pf_sr(ghosted_id)
+      watres2_pf_loc(local_id) = pf_porosity(ghosted_id)*pf_sr(ghosted_id)
 
    enddo
 
@@ -431,7 +436,8 @@ end subroutine parflowModelSetICs
     call VecRestoreArrayF90(clm_pf_idata%sucsat2_pf,  sucsat2_pf_loc,  ierr)
     call VecRestoreArrayF90(clm_pf_idata%watsat2_pf,  watsat2_pf_loc,  ierr)
     call VecRestoreArrayF90(clm_pf_idata%bsw2_pf,     bsw2_pf_loc,     ierr)
-    call VecRestoreArrayF90(clm_pf_idata%thetares2_pf,thetares2_pf_loc,ierr)
+!    call VecRestoreArrayF90(clm_pf_idata%thetares2_pf,thetares2_pf_loc,ierr)
+    call VecRestoreArrayF90(clm_pf_idata%watres2_pf,watres2_pf_loc,ierr)
 
 
     call MappingSourceToDestination(parflow_model%map_pf_sub_to_clm_sub, &
@@ -458,9 +464,12 @@ end subroutine parflowModelSetICs
                                     clm_pf_idata%watsat2_pf, &
                                     clm_pf_idata%watsat2_clm)
 
+    !call MappingSourceToDestination(parflow_model%map_pf_sub_to_clm_sub, &
+    !                                clm_pf_idata%thetares2_pf, &
+    !                                clm_pf_idata%thetares2_clm)
     call MappingSourceToDestination(parflow_model%map_pf_sub_to_clm_sub, &
-                                    clm_pf_idata%thetares2_pf, &
-                                    clm_pf_idata%thetares2_clm)
+                                    clm_pf_idata%watres2_pf, &
+                                    clm_pf_idata%watres2_clm)
     deallocate(pf_permx)
     deallocate(pf_permy)
     deallocate(pf_permz)
