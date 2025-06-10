@@ -142,7 +142,6 @@ contains
     ig = 0
     nlev_ = model%map_clm_sub_to_pf_sub%parflow_nlev 
     call elmparflowadvance(cur_time,cur_dt,elm_flux,pf_press,pf_por,pf_sat,nlev_, ig,ig,ig,ig)
-print *,'complete advancing---'
 !stop
     !assign model to output
     parflowModelCreate => model

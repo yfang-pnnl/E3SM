@@ -464,11 +464,9 @@ contains
 
           ! Ensure all data needed by external model is packed
           call EMID_Verify_All_Data_Is_Set(l2e_init_list(clump_rank), em_stage)
-print *,'gosh---10'
 
           ! Initialize the external model
           call em_parflow(clump_rank)%Init(l2e_init_list(clump_rank),e2l_init_list(clump_rank),iam,bounds_clump)
-print *,'gosh---11'
 
           ! Build a column level filter on which VSFM is active.
           ! This new filter would be used during the initialization to
@@ -509,7 +507,6 @@ print *,'gosh---11'
 
           ! Ensure all data sent by external model is unpacked
           call EMID_Verify_All_Data_Is_Set(e2l_init_list(clump_rank), em_stage)
-print *,'gosh---8'
           associate(& 
             h2osoi_liq    => col_ws%h2osoi_liq    , &
             smp_l => soilstate_vars%smp_l_col , &

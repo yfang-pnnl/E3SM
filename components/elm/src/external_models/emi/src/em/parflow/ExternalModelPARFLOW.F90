@@ -503,13 +503,10 @@ contains
     !parflow_m => parflowModelCreate(mpicom,npes,iam,prefix,mapfile)
 
     ! Initialize size and vector for clm and parflow
-print *,'gosh init-1'
     call CreateCLMPARFLOWInterfaceDate(this, bounds_clump, clm_npts, clm_surf_npts)
-print *,'gosh init-2'
 
     ! Create CLM-PARFLOW mapping files
     call CreateCLMPARFLOWMaps(this, bounds_clump, clm_npts, clm_surf_npts)
-print *,'gosh init-3'
 
     ! Initialize PARFLOW states
 
@@ -522,13 +519,10 @@ print *,'gosh init-3'
     !call parflowModelGetUpdatedData(this%parflow_m)
     ! Get parflow soil properties
     call parflowsoilprop(this%parflow_m%map_clm_sub_to_pf_sub%parflow_nlev)
-print *,'gosh init-4'
     call parflowModelGetTopFaceArea(this%parflow_m)
-print *,'gosh init-5'
 
     ! Save the data need by ELM
     call extract_data_for_elm(this, l2e_init_list, e2l_init_list, bounds_clump)
-print *,'gosh init-6'
 
   end subroutine EM_PARFLOW_Init
 
@@ -638,7 +632,6 @@ print *,'gosh init-6'
     !allocate(clm_surf_cell_ids_nindex(1:clm_surf_npts))
 
     nlevmapped     = clm_pf_idata%nzclm_mapped
-if(iam==0) print *,'create-gosh-1',nlevmapped
     clm_npts       = 0
     clm_surf_npts  = 0
     do g = bounds%begg, bounds%endg
@@ -646,22 +639,18 @@ if(iam==0) print *,'create-gosh-1',nlevmapped
           clm_npts = clm_npts + 1
           !clm_cell_ids_nindex(clm_npts) = (ldecomp%gdc2glo(g)-1)*nlevmapped + j - 1
           clm_cell_ids_nindex(clm_npts) = (ldecomp%gdc2glo_rc(g)-1)*nlevmapped + j - 1
-if(iam==0 .and. j==1) print *,'gosh-g',g,ldecomp%gdc2glo_rc(g),clm_cell_ids_nindex(clm_npts)
        enddo
        !clm_surf_npts = clm_surf_npts + 1
        !clm_surf_cell_ids_nindex(clm_surf_npts) = (ldecomp%gdc2glo(g)-1)*nlevmapped
     enddo
-print *,'gosh-2-grids- ',clm_cell_ids_nindex(clm_npts),clm_npts
     ! Initialize maps for transferring data between CLM and PARFLOW. Defined in
     ! parflow_dir/elm/parflow_model.F90
     call parflowModelInitMapping(this%parflow_m, clm_cell_ids_nindex, &
                                   clm_npts,CLM_SUB_TO_PF_SUB,mpicom,iam)
-print *,'create-gosh-2 clmnpts',clm_npts
 !    call parflowModelInitMapping(this%parflow_m, clm_cell_ids_nindex, &
 !                                  clm_npts, nlmax_pf,CLM_SUB_TO_PF_EXTENDED_SUB)
     call parflowModelInitMapping(this%parflow_m, clm_cell_ids_nindex, &
                                   clm_npts, PF_SUB_TO_CLM_SUB,mpicom,iam)
-print *,'create-gosh-3 clmnpts',clm_npts
     deallocate(clm_cell_ids_nindex)
     !deallocate(clm_surf_cell_ids_nindex)
   end subroutine CreateCLMPARFLOWMaps
@@ -1119,7 +1108,6 @@ print *,'create-gosh-3 clmnpts',clm_npts
 
     nlevmapped = clm_pf_idata%nzclm_mapped
     pf_nlevmapped = clm_pf_idata%nzpf_mapped
-print *,' --- gosh -----',nlevmapped,pf_nlevmapped
     call parflowModelGetSaturation(this%parflow_m,pf_sat,pf_grid_vol,pf_por)
 
     ! Get total mass
@@ -1271,13 +1259,11 @@ print *,' --- gosh -----',nlevmapped,pf_nlevmapped
     elm_flux(:) = elm_flux(:) * 3600.d0 * 1.0d-3 !/ pf_grid_dz(:)
     call elmparflowadvance(pftime,pfdt,elm_flux,pf_press,pf_porosity,pf_sat,pf_nlevmapped, &
                            0,0,0,0)
-print *,'mapped-',nlevmapped,nlevgrnd
 
     call VecGetArrayF90(clm_pf_idata%sat_clm   , sat_clm_loc   , ierr); CHKERRQ(ierr)
     call VecGetArrayF90(clm_pf_idata%mass_clm  , mass_clm_loc  , ierr); CHKERRQ(ierr)
     call VecGetArrayF90(clm_pf_idata%watsat2_clm, watsat_clm_loc, ierr); CHKERRQ(ierr)
     call VecGetArrayF90(clm_pf_idata%watres2_clm, watres_clm_loc, ierr); CHKERRQ(ierr)
-print  *,'here -1'
     do fc = 1, l2e_num_hydrologyc
        c = l2e_filter_hydrologyc(fc)
        g = col_gridcell(c)
@@ -1310,7 +1296,6 @@ print  *,'here -1'
        e2l_wtd(c) = l2e_zi(c,nlevmapped)
     end do
 
-print  *,'here -2'
     ! Save soil liquid pressure from VSFM for all (active+nonactive) cells.
     ! soilp_col is used for restarting VSFM.
     do c = begc, endc
@@ -1332,7 +1317,6 @@ print  *,'here -2'
     call VecRestoreArrayF90(clm_pf_idata%watres2_clm, watres_clm_loc, ierr); CHKERRQ(ierr)
 
 
-print  *,'here -3'
     deallocate(frac_ice                    )
     deallocate(total_mass_flux_col         )
     deallocate(total_mass_flux_et_col      )
