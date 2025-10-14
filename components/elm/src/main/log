@@ -1,0 +1,152 @@
+15,17c15,17
+<   use elm_varctl       , only : use_fates, use_betr, use_fates_sp, use_fan, use_fates_luh
+<   use elm_varsur       , only : wt_lunit, urban_valid, wt_nat_patch, wt_cft, wt_glc_mec, topo_glc_mec,firrig,f_surf,f_grd
+<   use elm_varsur       , only : fert_cft, fert_p_cft, wt_polygon
+---
+>   use elm_varctl       , only : use_fates, use_betr, use_fates_sp
+>   use elm_varsur       , only : wt_lunit, urban_valid, wt_nat_patch, wt_cft, wt_glc_mec, topo_glc_mec,firrig,f_surf,f_grd 
+>   use elm_varsur       , only : fert_cft
+24c24
+<   use ELMFatesParamInterfaceMod, only: FatesReadPFTs
+---
+>   use CLMFatesParamInterfaceMod, only: FatesReadPFTs
+26d25
+<   use SoilLittVertTranspMod, only : CreateLitterTransportList
+33c32
+<   use TopounitDataType       , only : top_as, top_af, top_es, top_ws
+---
+>   use TopounitDataType       , only : top_as, top_af, top_es
+63d61
+<     use elm_varpar                , only: mxpft, numveg, mxpft_nc, numpft
+67c65
+<     use landunit_varcon           , only: landunit_varcon_init, max_lunit, istice_mec, max_polygon, max_non_poly_lunit
+---
+>     use landunit_varcon           , only: landunit_varcon_init, max_lunit, istice_mec
+83d80
+<     use decompInitMod             , only: decompInit_lnd_simple
+90,91c87,88
+<     use topounit_varcon           , only: max_topounits, has_topounit, topounit_varcon_init
+<     use elm_varctl                , only: use_top_solar_rad, use_polygonal_tundra
+---
+>     use topounit_varcon           , only: max_topounits, has_topounit, topounit_varcon_init    
+>     use elm_varctl                , only: use_top_solar_rad
+197,200c194
+<     case ("simple")
+<       call decompInit_lnd_simple(ni, nj, amask)
+<       deallocate(amask)
+<    case default
+---
+>     case default
+271,275c265
+<     if (use_polygonal_tundra) then
+<       allocate (wt_lunit     (begg:endg,1:max_topounits, max_lunit           ))
+<     else
+<       allocate (wt_lunit     (begg:endg,1:max_topounits, max_non_poly_lunit  ))
+<     end if
+---
+>     allocate (wt_lunit     (begg:endg,1:max_topounits, max_lunit           )) 
+277,280c267,269
+<     !allocate (wt_nat_patch (begg:endg,1:max_topounits, surfpft_lb:surfpft_ub ))
+<     !allocate (wt_cft       (begg:endg,1:max_topounits, cft_lb:cft_ub       ))
+<     !allocate (fert_cft     (begg:endg,1:max_topounits, cft_lb:cft_ub       ))
+<     !allocate (fert_p_cft   (begg:endg,1:max_topounits, cft_lb:cft_ub       ))
+---
+>     allocate (wt_nat_patch (begg:endg,1:max_topounits, surfpft_lb:surfpft_ub ))
+>     allocate (wt_cft       (begg:endg,1:max_topounits, cft_lb:cft_ub       ))
+>     allocate (fert_cft     (begg:endg,1:max_topounits, cft_lb:cft_ub       ))
+288,289c277,278
+<     allocate (wt_polygon (begg:endg,1:max_topounits, max_polygon))
+<     allocate (wt_tunit  (begg:endg,1:max_topounits  ))
+---
+>     
+>     allocate (wt_tunit  (begg:endg,1:max_topounits  )) 
+302,309d290
+<     ! if by user-defined PFT (numbers and names), 'numpft/mxpft_nc' may be changed including other derived indices
+<     !
+<     ! a few arrays allocation previously done above is moved here i.e. after this 'pftconrd' call
+<     allocate (wt_nat_patch (begg:endg,1:max_topounits, surfpft_lb:surfpft_ub ))
+<     allocate (wt_cft       (begg:endg,1:max_topounits, cft_lb:cft_ub       ))
+<     allocate (fert_cft     (begg:endg,1:max_topounits, cft_lb:cft_ub       ))
+<     allocate (fert_p_cft   (begg:endg,1:max_topounits, cft_lb:cft_ub       ))
+< 
+368d348
+<     call top_ws%Init (bounds_proc%begt_all, bounds_proc%endt_all) ! water state
+439d418
+<     deallocate (wt_polygon) ! RF - might be used elsewhere, not sure if we want to deallocate here.
+483,485c462,464
+<     use elm_time_manager      , only : get_step_size, get_curr_calday
+<     use elm_time_manager      , only : get_curr_date, get_nstep, advance_timestep
+<     use elm_time_manager      , only : timemgr_init, timemgr_restart_io, timemgr_restart
+---
+>     use clm_time_manager      , only : get_step_size, get_curr_calday
+>     use clm_time_manager      , only : get_curr_date, get_nstep, advance_timestep
+>     use clm_time_manager      , only : timemgr_init, timemgr_restart_io, timemgr_restart
+487d465
+<     use controlMod            , only : fluh_timeseries
+520d497
+<     use elm_varctl                          , only : fates_spitfire_mode
+523c500
+<     use elm_time_manager      , only : is_restart
+---
+>     use clm_time_manager      , only : is_restart
+526,528d502
+<     use FATESFireFactoryMod   , only : scalar_lightning
+<     use FanStreamMod          , only : fanstream_init, fanstream_interp
+<     use dynFATESLandUseChangeMod, only : dynFatesLandUseInit
+728,729d701
+<     call energyflux_vars%InitAccBuffer(bounds_proc)
+< 
+737,740d708
+<     
+<     if (use_fates) then
+<       call alm_fates%InitAccBuffer(bounds_proc)
+<    end if
+757,761d724
+<     ! Initialize fates LUH2 usage
+<     if (use_fates_luh) then
+<        call dynFatesLandUseInit(bounds_proc, fluh_timeseries)
+<     end if
+< 
+772,780c735,736
+<     if (use_fates) then
+<        if (use_fates_sp) then
+<           call SatellitePhenologyInit(bounds_proc)
+<        end if
+<        ! fates_spitfire_mode is assigned an integer value in the namelist
+<        ! see bld/namelist_files/namelist_definitio.xml for details
+<        if(fates_spitfire_mode > scalar_lightning) then
+<          call alm_fates%Init2(bounds_proc, NLFilename)
+<        end if
+---
+>     if (use_fates_sp) then
+>        call SatellitePhenologyInit(bounds_proc)
+789,794d744
+<     if (use_cn .or. use_fates) then 
+<        ! Create pointers to decomp pools for SoilLittVertTransp
+<        call CreateLitterTransportList()
+<     end if 
+< 
+< 
+920c870
+<        call ndep_init(bounds_proc, NLFilename)
+---
+>        call ndep_init(bounds_proc)
+923,928d872
+<        if ( use_fan ) then
+<           call t_startf('init_fandep')
+<           call fanstream_init(bounds_proc, NLFilename)
+<           call fanstream_interp(bounds_proc, atm2lnd_vars)
+<           call t_stopf('init_fandep')
+<        end if
+967d910
+<     call energyflux_vars%initAccVars(bounds_proc)
+972,974d914
+<     if (use_fates) then
+<        call alm_fates%initAccVars(bounds_proc)
+<     end if
+1132d1071
+<     use ExternalModelConstants   , only : EM_ID_PARFLOW
+1133a1073
+>     use ExternalModelConstants   , only : EM_ID_PARFLOW
+1142a1083
+> 

@@ -15,6 +15,7 @@ module elm_driver
   use elm_varctl             , only : wrtdia, iulog, create_glacier_mec_landunit, use_fates, use_betr, use_firn_percolation_and_compaction
   use elm_varctl             , only : use_cn, use_lch4, use_voc, use_noio, use_c13, use_c14
   use elm_varctl             , only : use_erosion, use_fates_sp, use_fan
+  use elm_varctl             , only : use_parflow_via_emi
   use elm_varctl             , only : mpi_sync_nstep_freq
   use elm_time_manager       , only : get_step_size, get_curr_date, get_ref_date, get_nstep, is_beg_curr_day, get_curr_time_string
   use elm_time_manager       , only : get_curr_calday, get_days_per_year
@@ -1311,19 +1312,21 @@ contains
        ! ============================================================================
 
        call t_startf('balchk')
-       call ColWaterBalanceCheck(bounds_clump, &
+       if (.not.use_parflow_via_emi) then
+        call ColWaterBalanceCheck(bounds_clump, &
             filter(nc)%num_do_smb_c, filter(nc)%do_smb_c, &
             atm2lnd_vars, glc2lnd_vars, solarabs_vars,  &
             energyflux_vars, canopystate_vars)
-       call t_stopf('balchk')
+        call t_stopf('balchk')
 
-       call t_startf('gridbalchk')
-       call GridBalanceCheck(bounds_clump                  , &
+        call t_startf('gridbalchk')
+        call GridBalanceCheck(bounds_clump                  , &
             filter(nc)%num_do_smb_c, filter(nc)%do_smb_c   , &
             atm2lnd_vars, glc2lnd_vars, solarabs_vars,       &
             energyflux_vars, canopystate_vars              , &
             soilhydrology_vars)
-       call t_stopf('gridbalchk')
+        call t_stopf('gridbalchk')
+       endif
 
        if (do_budgets) then
           call WaterBudget_SetEndingMonthlyStates(bounds_clump)

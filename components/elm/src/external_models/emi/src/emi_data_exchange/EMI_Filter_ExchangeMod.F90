@@ -33,6 +33,7 @@ contains
     !
     integer                           :: i
     class(emi_data), pointer          :: cur_data
+    class(emi_data), pointer          :: temp_ptr
     logical                           :: need_to_pack
     integer                           :: istage
 
@@ -67,7 +68,8 @@ contains
 
        endif
 
-       cur_data => cur_data%next
+       temp_ptr => cur_data%next
+       cur_data => temp_ptr
     enddo
 
   end subroutine EMI_Pack_Filter_for_EM

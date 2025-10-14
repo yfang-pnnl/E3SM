@@ -51,6 +51,7 @@ contains
     ! !LOCAL_VARIABLES:
     integer                             :: fc,c,j
     class(emi_data), pointer            :: cur_data
+    class(emi_data), pointer            :: temp_ptr
     logical                             :: need_to_pack
     integer                             :: istage
     integer                             :: count
@@ -210,7 +211,8 @@ contains
 
        endif
 
-       cur_data => cur_data%next
+       temp_ptr => cur_data%next
+       cur_data => temp_ptr
     enddo
 
     end associate
@@ -239,6 +241,7 @@ contains
     ! !LOCAL_VARIABLES:
     integer                             :: fp,p,j
     class(emi_data), pointer            :: cur_data
+    class(emi_data), pointer            :: temp_ptr
     logical                             :: need_to_pack
     integer                             :: istage
     integer                             :: count
@@ -278,7 +281,8 @@ contains
 
        endif
 
-       cur_data => cur_data%next
+       temp_ptr => cur_data%next
+       cur_data => temp_ptr
     enddo
 
     end associate
@@ -307,12 +311,17 @@ contains
     ! !LOCAL_VARIABLES:
     integer                             :: fc,c,j
     class(emi_data), pointer            :: cur_data
+    class(emi_data), pointer            :: temp_ptr
     logical                             :: need_to_pack
     integer                             :: istage
     integer                             :: count
 
     associate(& 
-         smp_l => soilstate_vars%smp_l_col   &
+         smp_l => soilstate_vars%smp_l_col ,  &
+         watsat => soilstate_vars%watsat_col , &
+         hksat  => soilstate_vars%hksat_col  , &
+         bsw    => soilstate_vars%bsw_col    , &
+         sucsat => soilstate_vars%sucsat_col   &
          )
 
     count = 0
@@ -342,11 +351,47 @@ contains
              enddo
              cur_data%is_set = .true.
 
+          case (E2L_PARAMETER_WATSATC)
+             do fc = 1, num_filter
+                c = filter(fc)
+                do j = 1, nlevgrnd
+                   watsat(c,j) = cur_data%data_real_2d(c,j)
+                enddo
+             enddo
+             cur_data%is_set = .true.
+
+          case (E2L_PARAMETER_HKSATC)
+             do fc = 1, num_filter
+                c = filter(fc)
+                do j = 1, nlevgrnd
+                   hksat(c,j) = cur_data%data_real_2d(c,j)
+                enddo
+             enddo
+             cur_data%is_set = .true.
+
+          case (E2L_PARAMETER_BSWC)
+             do fc = 1, num_filter
+                c = filter(fc)
+                do j = 1, nlevgrnd
+                   bsw(c,j) = cur_data%data_real_2d(c,j)
+                enddo
+             enddo
+             cur_data%is_set = .true.
+
+          case (E2L_PARAMETER_SUCSATC)
+             do fc = 1, num_filter
+                c = filter(fc)
+                do j = 1, nlevgrnd
+                   sucsat(c,j) = cur_data%data_real_2d(c,j)
+                enddo
+             enddo
+             cur_data%is_set = .true.
           end select
 
        endif
 
-       cur_data => cur_data%next
+       temp_ptr => cur_data%next
+       cur_data => temp_ptr
     enddo
 
     end associate

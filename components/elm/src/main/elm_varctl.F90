@@ -425,6 +425,8 @@ module elm_varctl
   !----------------------------------------------------------
   logical, public :: use_petsc_thermal_model = .false.
 
+  logical           , public :: use_parflow_via_emi = .false.
+
   !----------------------------------------------------------
   ! Stub EM switches
   !----------------------------------------------------------

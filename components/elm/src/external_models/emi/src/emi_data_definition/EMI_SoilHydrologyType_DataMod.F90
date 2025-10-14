@@ -51,7 +51,6 @@ contains
     dim2_end_name  = ''
     dim3_end_name  = ''
     dim4_end_name  = ''
-
     select case(data_id)
 
     case(L2E_STATE_WTD)

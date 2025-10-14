@@ -51,6 +51,7 @@ contains
     ! !LOCAL_VARIABLES:
     integer                             :: fc,c,j
     class(emi_data), pointer            :: cur_data
+    class(emi_data), pointer            :: temp_ptr
     logical                             :: need_to_pack
     integer                             :: istage
     integer                             :: count
@@ -256,7 +257,8 @@ contains
 
        endif
 
-       cur_data => cur_data%next
+       temp_ptr => cur_data%next
+       cur_data => temp_ptr
     enddo
 
     end associate
@@ -285,6 +287,7 @@ contains
     ! !LOCAL_VARIABLES:
     integer                             :: fc,c,j
     class(emi_data), pointer            :: cur_data
+    class(emi_data), pointer            :: temp_ptr
     logical                             :: need_to_pack
     integer                             :: istage
     integer                             :: count
@@ -292,7 +295,8 @@ contains
     associate(& 
          h2osoi_liq => col_ws%h2osoi_liq , &
          h2osoi_ice => col_ws%h2osoi_ice , &
-         soilp      => col_ws%soilp        &
+         soilp      => col_ws%soilp      ,  &
+         h2osoi_vol => col_ws%h2osoi_vol   &
          )
 
     count = 0
@@ -340,11 +344,30 @@ contains
              enddo
              cur_data%is_set = .true.
 
+          case (E2L_STATE_H2OSOI_VOL_NLEVSOI)
+             do fc = 1, num_filter
+                c = filter(fc)
+                do j = 1, nlevsoi
+                   h2osoi_vol(c,j) = cur_data%data_real_2d(c,j)
+                enddo
+             enddo
+             cur_data%is_set = .true.
+
+          case (E2L_STATE_H2OSOI_VOL_NLEVGRND)
+             do fc = 1, num_filter
+                c = filter(fc)
+                do j = 1, nlevgrnd
+                   h2osoi_vol(c,j) = cur_data%data_real_2d(c,j)
+                enddo
+             enddo
+             cur_data%is_set = .true.
+
           end select
 
        endif
 
-       cur_data => cur_data%next
+       temp_ptr => cur_data%next
+       cur_data => temp_ptr
     enddo
 
     end associate

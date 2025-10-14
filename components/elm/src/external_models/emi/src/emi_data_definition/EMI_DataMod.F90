@@ -1201,6 +1201,7 @@ contains
     logical, intent(inout)   :: data_present
     !
     class(emi_data), pointer :: cur_data
+    class(emi_data), pointer :: temp_ptr
 
     data_present = .false.
 
@@ -1213,7 +1214,8 @@ contains
           exit
        endif
 
-       cur_data => cur_data%next
+       temp_ptr => cur_data%next
+       cur_data => temp_ptr
     enddo
 
   end subroutine EMIDIsDataIDPresent
@@ -1234,6 +1236,7 @@ contains
     integer, intent(out)          :: index_of_new_data
     !
     class(emi_data), pointer      :: cur_data
+    class(emi_data), pointer      :: temp_ptr
     integer                       :: index_of_data
 
     index_of_data = 0
@@ -1249,7 +1252,8 @@ contains
           exit
        endif
 
-       cur_data => cur_data%next
+       temp_ptr => cur_data%next
+       cur_data => temp_ptr
     enddo
 
   end subroutine EMIDListAppendDataEMStages
@@ -1731,6 +1735,7 @@ contains
     !
     ! !LOCAL VARIABLES:
     class(emi_data)      , pointer    :: cur_data
+    class(emi_data)      , pointer    :: temp_ptr
     class(emi_data)      , pointer    :: new_data
     integer                           :: idata
 
@@ -1755,7 +1760,8 @@ contains
 
        nullify(new_data)
 
-       cur_data => cur_data%next
+       temp_ptr => cur_data%next
+       cur_data => temp_ptr
     enddo
 
   end subroutine EMIDListCopy
@@ -2011,6 +2017,7 @@ contains
     class(emi_data_list)     :: this
     !
     class(emi_data)      , pointer    :: cur_data
+    class(emi_data)      , pointer    :: temp_ptr
     integer :: count
 
     !write(iulog,*)'Number of variables in the list = ',this%num_data
@@ -2023,7 +2030,8 @@ contains
        count = count + 1
        call cur_data%PrintInfo(count)
 
-       cur_data => cur_data%next
+       temp_ptr => cur_data%next
+       cur_data => temp_ptr
     enddo
 
   end subroutine EMIDListPrintInfo

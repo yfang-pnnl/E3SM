@@ -1401,8 +1401,8 @@ contains
     !-----------------------------------------------------------------------
     ! allocate for each member of col_ws
     !-----------------------------------------------------------------------
-    allocate(this%h2osoi_liq         (begc:endc,-nlevsno+1:nlevgrnd)) ; this%h2osoi_liq         (:,:) = spval
-    allocate(this%h2osoi_ice         (begc:endc,-nlevsno+1:nlevgrnd)) ; this%h2osoi_ice         (:,:) = spval
+    allocate(this%h2osoi_liq         (begc:endc,-nlevsno+1:nlevgrnd)) ; this%h2osoi_liq         (:,:) = 0._r8
+    allocate(this%h2osoi_ice         (begc:endc,-nlevsno+1:nlevgrnd)) ; this%h2osoi_ice         (:,:) = 0._r8
     allocate(this%h2osoi_vol         (begc:endc, 1:nlevgrnd))         ; this%h2osoi_vol         (:,:) = spval
     allocate(this%h2osfc             (begc:endc))                     ; this%h2osfc             (:)   = spval
     allocate(this%h2ocan             (begc:endc))                     ; this%h2ocan             (:)   = spval
@@ -1731,7 +1731,7 @@ contains
 
        this%h2osoi_vol(c,         1:) = spval
        this%h2osoi_liq(c,-nlevsno+1:) = spval
-       this%h2osoi_ice(c,-nlevsno+1:) = spval
+       this%h2osoi_ice(c,-nlevsno+1:) = 0._r8
 
        if (.not. lun_pp%lakpoi(l)) then  !not lake
 	       nlevbed = col_pp%nlevbed(c)

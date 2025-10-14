@@ -182,7 +182,8 @@ contains
     ! 0 is a valid value of pio_buffer_size_limit
     ! -1 is the value used by CIME to let the library choose the buffer limit
     if(pio_buffer_size_limit>=-1) then
-       call pio_set_buffer_size_limit(pio_buffer_size_limit, prev_limit=cur_buffer_size_limit)
+       !call pio_set_buffer_size_limit(pio_buffer_size_limit, prev_limit=cur_buffer_size_limit)
+       call pio_set_buffer_size_limit(pio_buffer_size_limit, cur_buffer_size_limit)
        if(comp_comm_iam(1)==0) then
           if(pio_buffer_size_limit >= 0) then
             write(shr_log_unit,*) 'Set pio_buffer_size_limit to : ', pio_buffer_size_limit, ' (bytes)'

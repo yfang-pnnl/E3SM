@@ -59,6 +59,7 @@ contains
     use elm_varpar       , only : nlevgrnd, nlevurb, nlevsoi
     use SoilHydrologyMod , only : ELMVICMap, Drainage
     use elm_varctl       , only : use_vsfm, use_IM2_hillslope_hydrology
+    use elm_varctl       , only : use_parflow_via_emi
     !
     ! !ARGUMENTS:
     type(bounds_type)        , intent(in)    :: bounds
@@ -144,7 +145,7 @@ contains
       endif
 #endif
 
-      if (.not. use_vsfm) then
+      if ((.not. (use_vsfm)) .or. (.not. use_parflow_via_emi)) then
          call Drainage(bounds, num_hydrologyc, filter_hydrologyc, &
               num_urbanc, filter_urbanc,&
               soilhydrology_vars, soilstate_vars, dtime)

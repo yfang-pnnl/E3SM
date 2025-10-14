@@ -50,6 +50,7 @@ contains
     ! !LOCAL_VARIABLES:
     integer                             :: fc,c,j
     class(emi_data), pointer            :: cur_data
+    class(emi_data), pointer            :: temp_ptr
     logical                             :: need_to_pack
     integer                             :: istage
     integer                             :: count
@@ -121,7 +122,8 @@ contains
 
        endif
 
-       cur_data => cur_data%next
+       temp_ptr => cur_data%next
+       cur_data => temp_ptr
     enddo
 
     end associate

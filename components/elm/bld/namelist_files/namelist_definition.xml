@@ -2054,6 +2054,25 @@ topounit level. Based on the IM2 implementation from NGEE Arctic project.
     pflotran file prefix.
 </entry>
 
+<entry id="parflow_inputdir" type="char*256" category="elm_parflow"
+    group="elm_parflow_inparm" valid_values="" >
+    pflotran input directory in which $parflow_prefix.pfidb and files contained should be located, but not yet done.
+</entry>
+
+<entry id="parflow_prefix" type="char*256" category="elm_parflow"
+    group="elm_parflow_inparm" valid_values="" >
+    parflow file prefix.
+</entry>
+<entry id="pf_elm_mapfile" type="char*256" category="elm_parflow"
+    group="elm_parflow_inparm" valid_values="" >
+    parflow elm file containing the elm-parflow grid mapping.
+</entry>
+
+<entry id="use_parflow_via_emi" type="logical" category="default_settings"
+    group="elm_inparm" valid_values="">
+    Runtime flag to turn on/off PARFLOW via EMI.
+</entry>
+
 <!-- ========================================================================================  -->
 <!-- Namelist options related to Variably Saturated Flow Model (VSFM)                          -->
 <!-- ========================================================================================  -->
