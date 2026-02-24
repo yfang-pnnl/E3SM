@@ -38,6 +38,7 @@ module elm_initializeMod
   use VegetationType         , only : veg_pp
   use VegetationDataType     , only : veg_es
 
+  use h3dType                , only : h3d_vars
   use elm_instMod
   use WaterBudgetMod         , only : WaterBudget_Reset
   use CNPBudgetMod           , only : CNPBudget_Reset
@@ -71,6 +72,7 @@ contains
     use elm_varpar                , only: mxpft, numveg, mxpft_nc, numpft
     use elm_varpar                , only: update_pft_array_bounds
     use elm_varpar                , only: surfpft_lb, surfpft_ub
+    use elm_varpar                , only: nh3dc_per_lunit
     use elm_varcon                , only: elm_varcon_init
     use landunit_varcon           , only: landunit_varcon_init, max_lunit, istice_mec, max_polygon, max_non_poly_lunit
     use column_varcon             , only: col_itype_to_icemec_class
@@ -82,7 +84,7 @@ contains
     use decompInitMod             , only: decompInit_moab
 #endif
     use domainMod                 , only: domain_check, ldomain, domain_init
-    use surfrdMod                 , only: surfrd_get_globmask, surfrd_get_grid, surfrd_get_topo, surfrd_get_data, surfrd_get_topo_for_solar_rad, surfrd_finetop_data
+    use surfrdMod                 , only: surfrd_get_globmask, surfrd_get_grid, surfrd_get_topo, surfrd_get_data, surfrd_get_topo_for_solar_rad, surfrd_finetop_data, surfrd_read_h3d_dims
     use controlMod                , only: control_init, control_print, NLFilename
     use ncdio_pio                 , only: ncd_pio_init
     use initGridCellsMod          , only: initGridCells, initGhostGridCells
@@ -100,6 +102,7 @@ contains
     use reweightMod               , only: reweight_wrapup
     use topounit_varcon           , only: max_topounits, has_topounit, topounit_varcon_init
     use elm_varctl                , only: use_top_solar_rad, use_polygonal_tundra
+    use elm_varctl                , only: use_h3d
     use shr_log_mod               , only: errMsg => shr_log_errMsg
     !
     ! !LOCAL VARIABLES:
@@ -330,6 +333,10 @@ contains
     allocate (firrig  (begg:endg,1:max_topounits  ))
     allocate (f_surf  (begg:endg,1:max_topounits  ))
     allocate (f_grd  (begg:endg,1:max_topounits  ))
+    ! Read nh3dc_per_lunit from surface dataset before any allocations that depend on it
+    call surfrd_read_h3d_dims(fsurdat)
+
+    allocate (wt_h3dc    (begg:endg,1:nh3dc_per_lunit ))
 
     ! Read list of Patches and their corresponding parameter values
     ! Independent of model resolution, Needs to stay before surfrd_get_data
@@ -412,6 +419,10 @@ contains
     ! Initialize the vegetation (PFT) data types
     call veg_pp%Init (bounds_proc%begp_all, bounds_proc%endp_all)
 
+    ! Initialize h3d_vars
+    call h3d_vars%Init (bounds_proc%begl_all, bounds_proc%endl_all, &
+         bounds_proc%begc_all, bounds_proc%endc_all)
+
     ! Initialize the cohort data types (nothing here yet)
     ! ...to be added later...
 
@@ -481,6 +492,8 @@ contains
     deallocate (wt_cft, wt_glc_mec)    !wt_lunit not deallocated because it is being used in CanopyHydrologyMod.F90
     deallocate (wt_tunit, elv_tunit, slp_tunit, asp_tunit,num_tunit_per_grd)
     deallocate (wt_polygon) ! RF - might be used elsewhere, not sure if we want to deallocate here.
+    !deallocate wt_h3dc
+    deallocate (wt_h3dc)
     call t_stopf('elm_init1')
 
     ! initialize glc_topo
