@@ -1,0 +1,81 @@
+digraph G {
+    fontname="Helvetica"
+    node [fontname="Helvetica", shape=box, style="filled,rounded", height=0.6, penwidth=2];
+    edge [fontname="Helvetica", color="#555555", penwidth=1.5, arrowsize=0.8, fontsize=10];
+    rankdir="TB";
+    splines="spline";
+    nodesep=0.7;
+    ranksep=0.7;
+
+    labelloc="t";
+    label="ELM Hydrology: Precipitation to Soil Column Recharge";
+    fontsize=18;
+
+    PRECIP [label="Precipitation\nqflx_prec_grnd\n(rain + snow)", fillcolor="#cce5ff", color="#3399ff"];
+
+    subgraph cluster_canopy {
+        label="Canopy";
+        style="filled,rounded";
+        fillcolor="#f7fbf7";
+        color="#28a745";
+        fontcolor="#155724";
+        margin=15;
+
+        CINT [label="Canopy (H2OCAN)\nthroughfall: qflx_through_rain\nqflx_through_snow\ndrip: qflx_drain_cansnow", fillcolor="#d4edda", color="#28a745"];
+        CEVAP [label="Canopy evaporation\nqflx_evap_can", fillcolor="#f8d7da", color="#dc3545"];
+        {rank=same; CINT; CEVAP}
+    }
+
+    subgraph cluster_snow {
+        label="Snow Pack";
+        style="filled,rounded";
+        fillcolor="#f2fbfd";
+        color="#5bc0de";
+        fontcolor="#0c5460";
+        margin=15;
+
+        SNOWACC [label="Snow Pack (H2OSNO)\nsnowmelt: qflx_snow_melt\nsublimation: qflx_sub_snow", fillcolor="#e8f4fd", color="#5bc0de"];
+    }
+
+    subgraph cluster_surface {
+        label="Soil Surface";
+        style="filled,rounded";
+        fillcolor="#fffdf5";
+        color="#e6ac00";
+        fontcolor="#856404";
+        margin=15;
+
+        POND [label="Soil Surface (fh2osfc)\nsurface runoff: qflx_surf\ninfiltration: qflx_infl", fillcolor="#fff3cd", color="#e6ac00"];
+    }
+
+    subgraph cluster_soil {
+        label="Soil Column (j = 1 ... nlevsoi)";
+        style="filled,rounded";
+        fillcolor="#fff9f2";
+        color="#e67e22";
+        fontcolor="#854c0e";
+        margin=15;
+
+        SOIL [label="Layer 1   H2OSOI,1\nLayer 2   H2OSOI,2\n...\nLayer n   H2OSOI,n", fillcolor="#fdebd0", color="#e67e22"];
+        EVSOIL [label="Soil evaporation\nqflx_evap_soi\n(top layer only)", fillcolor="#f8d7da", color="#dc3545"];
+        TRAN [label="Transpiration sink\nqflx_rootsoi,j\n(per layer)", fillcolor="#f8d7da", color="#dc3545"];
+        {rank=same; SOIL; EVSOIL}
+    }
+
+    RECHARGE [label="Aquifer Recharge\nqflx_recharge", fillcolor="#e2d9f3", color="#6f42c1"];
+
+    PRECIP -> CINT;
+    CINT -> CEVAP [color="#dc3545", style="dashed"];
+    CINT -> SNOWACC [color="#28a745", label="snow", headport="n"];
+    CINT -> POND [color="#28a745", label="rain/drip"];
+    
+    // To make sure POND doesn't float above SNOWACC
+    SNOWACC -> POND [color="#5bc0de", label="melt"];
+
+    POND -> SOIL [color="#e6ac00", label="infiltration"];
+
+    SOIL -> EVSOIL [color="#dc3545", style="dashed"];
+    SOIL -> TRAN [color="#dc3545", style="dashed"];
+
+    SOIL -> RECHARGE [color="#e67e22"];
+}
