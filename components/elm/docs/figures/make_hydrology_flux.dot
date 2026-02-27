@@ -1,81 +1,210 @@
 digraph G {
     fontname="Helvetica"
-    node [fontname="Helvetica", shape=box, style="filled,rounded", height=0.6, penwidth=2];
-    edge [fontname="Helvetica", color="#555555", penwidth=1.5, arrowsize=0.8, fontsize=10];
+    fontsize=14
+    node [fontname="Helvetica", shape=box, style="filled,rounded", height=0.7, penwidth=1.5];
+    edge [fontname="Helvetica", color="#666666", penwidth=2, arrowsize=0.8];
     rankdir="TB";
-    splines="spline";
-    nodesep=0.7;
+    splines="ortho";
+    nodesep=0.6;
     ranksep=0.7;
-
+    
+    // Title
     labelloc="t";
-    label="ELM Hydrology: Precipitation to Soil Column Recharge";
-    fontsize=18;
+    label="ELM Hydrology: Precipitation to Recharge";
+    fontsize=20;
+    fontweight="bold";
 
-    PRECIP [label="Precipitation\nqflx_prec_grnd\n(rain + snow)", fillcolor="#cce5ff", color="#3399ff"];
+    // Precipitation
+    PRECIP [label=<
+        <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">
+            <TR><TD><B>Precipitation</B></TD></TR>
+            <TR><TD><FONT FACE="Courier" POINT-SIZE="12">qflx_prec_grnd</FONT></TD></TR>
+        </TABLE>
+    >, fillcolor="#d4edfc", color="#3399ff"];
 
     subgraph cluster_canopy {
-        label="Canopy";
+        label=<<B>Canopy</B>>;
         style="filled,rounded";
-        fillcolor="#f7fbf7";
+        fillcolor="#f2f9f2";
         color="#28a745";
         fontcolor="#155724";
-        margin=15;
+        margin=25;
 
-        CINT [label="Canopy (H2OCAN)\nthroughfall: qflx_through_rain\nqflx_through_snow\ndrip: qflx_drain_cansnow", fillcolor="#d4edda", color="#28a745"];
-        CEVAP [label="Canopy evaporation\nqflx_evap_can", fillcolor="#f8d7da", color="#dc3545"];
-        {rank=same; CINT; CEVAP}
+        H2OCAN [label=<
+            <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">
+                <TR><TD><B>H2OCAN</B></TD></TR>
+                <TR><TD POINT-SIZE="11">(canopy water store)</TD></TR>
+            </TABLE>
+        >, fillcolor="#d4edda", color="#28a745"];
+
+        CEVAP [label=<
+            <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">
+                <TR><TD><B>Evaporation</B></TD></TR>
+                <TR><TD><FONT FACE="Courier" POINT-SIZE="12">qflx_evap_can</FONT></TD></TR>
+            </TABLE>
+        >, fillcolor="#fff3cd", color="#e6ac00"];
+
+        THROUGH [label=<
+            <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">
+                <TR><TD><B>Throughfall &amp; drip</B></TD></TR>
+                <TR><TD><FONT FACE="Courier" POINT-SIZE="11">qflx_through_rain</FONT></TD></TR>
+                <TR><TD><FONT FACE="Courier" POINT-SIZE="11">qflx_through_snow</FONT></TD></TR>
+                <TR><TD><FONT FACE="Courier" POINT-SIZE="11">qflx_drain_cansnow</FONT></TD></TR>
+            </TABLE>
+        >, fillcolor="#d4edda", color="#28a745"];
+
+        {rank=same; CEVAP; H2OCAN; THROUGH;}
     }
 
     subgraph cluster_snow {
-        label="Snow Pack";
+        label=<<B>Snow Pack</B>>;
         style="filled,rounded";
-        fillcolor="#f2fbfd";
+        fillcolor="#f5fbfe";
         color="#5bc0de";
         fontcolor="#0c5460";
-        margin=15;
+        margin=25;
 
-        SNOWACC [label="Snow Pack (H2OSNO)\nsnowmelt: qflx_snow_melt\nsublimation: qflx_sub_snow", fillcolor="#e8f4fd", color="#5bc0de"];
+        H2OSNO [label=<
+            <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">
+                <TR><TD><B>H2OSNO</B></TD></TR>
+                <TR><TD POINT-SIZE="11">(snow water store)</TD></TR>
+            </TABLE>
+        >, fillcolor="#e8f4fd", color="#5bc0de"];
+
+        SNOWMELT [label=<
+            <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">
+                <TR><TD><B>Snowmelt</B></TD></TR>
+                <TR><TD><FONT FACE="Courier" POINT-SIZE="12">qflx_snow_melt</FONT></TD></TR>
+            </TABLE>
+        >, fillcolor="#e8f4fd", color="#5bc0de"];
+
+        SUBLIMATION [label=<
+            <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">
+                <TR><TD><B>Sublimation</B></TD></TR>
+                <TR><TD><FONT FACE="Courier" POINT-SIZE="12">qflx_sub_snow</FONT></TD></TR>
+            </TABLE>
+        >, fillcolor="#fff3cd", color="#e6ac00"];
+
+        {rank=same; SNOWMELT; H2OSNO; SUBLIMATION;}
     }
 
     subgraph cluster_surface {
-        label="Soil Surface";
+        label=<<B>Soil Surface</B>>;
         style="filled,rounded";
         fillcolor="#fffdf5";
         color="#e6ac00";
         fontcolor="#856404";
-        margin=15;
+        margin=25;
 
-        POND [label="Soil Surface (fh2osfc)\nsurface runoff: qflx_surf\ninfiltration: qflx_infl", fillcolor="#fff3cd", color="#e6ac00"];
+        POND [label=<
+            <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">
+                <TR><TD><B>Ponded water</B></TD></TR>
+                <TR><TD><FONT FACE="Courier" POINT-SIZE="12">fh2osfc</FONT></TD></TR>
+            </TABLE>
+        >, fillcolor="#fff3cd", color="#e6ac00"];
+
+        RUNOFF [label=<
+            <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">
+                <TR><TD><B>Surface runoff</B></TD></TR>
+                <TR><TD><FONT FACE="Courier" POINT-SIZE="12">qflx_surf</FONT></TD></TR>
+            </TABLE>
+        >, fillcolor="#f8d7da", color="#dc3545"];
+
+        INFIL [label=<
+            <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0
+           
+                <TR><TD>
+            </T
+        >, fillcolor="#fff3cd", color="#e6ac00"];
+        
+        {rank=same; RUNOFF; POND; 
     }
 
     subgraph cluster_soil {
-        label="Soil Column (j = 1 ... nlevsoi)";
-        style="filled,rounded";
-        fillcolor="#fff9f2";
-        color="#e67e22";
-        fontcolor="#854c0e";
-        margin=15;
+        label=<<B>Soil Column (j = 1 ... 
+        style="fi
+        fillcolor="#
+        color="#
+        fontcolo
+    
 
-        SOIL [label="Layer 1   H2OSOI,1\nLayer 2   H2OSOI,2\n...\nLayer n   H2OSOI,n", fillcolor="#fdebd0", color="#e67e22"];
-        EVSOIL [label="Soil evaporation\nqflx_evap_soi\n(top layer only)", fillcolor="#f8d7da", color="#dc3545"];
-        TRAN [label="Transpiration sink\nqflx_rootsoi,j\n(per layer)", fillcolor="#f8d7da", color="#dc3545"];
-        {rank=same; SOIL; EVSOIL}
+        L1 
+            <TABL
+                <TR><TD><B>Layer 1</B></TD></TR>
+    
+            </TA
+        >, fillcolor="
+
+        SEVAP [label
+            <TABLE 
+                <TR><TD><B>Soil evaporation</B></TD></TR>
+                <TR><TD><FONT FACE="Courier" POINT
+                <TR><TD POINT-SIZE="11">(top layer only)</TD></TR>
+            </TABLE>
+
+
+        L2 [lab
+            <TABLE BORDER="0" CELLBORDER="0" 
+
+                <TR><TD><FONT
+            </TABLE>
+        >
+        
+        DOTS [label=".
+
+        LN [label=<
+       
+                <TR><TD>
+                <TR><TD><FON
+            </TABL
+
+
+        TRANSP [label=
+            <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">
+                <TR><TD><B>Transpiration sink</
+                <TR><TD><FONT FACE="Courier" POINT-SIZE="12">qflx_root
+            </TABLE>
+        >, fillcolor="#f8d7da", color="#dc3545"];
+
+        {rank=same; SE
     }
 
-    RECHARGE [label="Aquifer Recharge\nqflx_recharge", fillcolor="#e2d9f3", color="#6f42c1"];
+    RECHARGE [label=<
+        <TABLE BORDER="0" CELLBO
+            <TR><TD><B>Aquifer recharge</B></TD></TR
+            <TR><TD><FONT FACE="Courier" POINT-SIZE="12">qflx_recharge</FONT></TD></TR>
+   
+        </TABLE>
+   
 
-    PRECIP -> CINT;
-    CINT -> CEVAP [color="#dc3545", style="dashed"];
-    CINT -> SNOWACC [color="#28a745", label="snow", headport="n"];
-    CINT -> POND [color="#28a745", label="rain/drip"];
-    
-    // To make sure POND doesn't float above SNOWACC
-    SNOWACC -> POND [color="#5bc0de", label="melt"];
+    // Connections
+    PRECIP -> H2OCAN;
 
-    POND -> SOIL [color="#e6ac00", label="infiltration"];
+    H2
 
-    SOIL -> EVSOIL [color="#dc3545", style="dashed"];
-    SOIL -> TRAN [color="#dc3545", style="dashed"];
 
-    SOIL -> RECHARGE [color="#e67e22"];
+    THROUGH -> H2OSNO [
+    THROUGH -> POND [label=" rain/drip", fontcolor="#555555",
+
+    H2OSNO -> SUBLIMATION [style="dashed", color="#e6ac00"];
+ 
+
+    SNOWMELT -> POND;
+
+    POND -> RUNOFF [style="dashed", color="#dc3545"];
+    POND -> INFIL
+
+    INFIL -> L1;
+
+    L1 -> SEVAP [style="dashed", color="#e6ac00"];
+    L1 -> L2;
+    L2 -> D
+    DOTS -> LN;
+
+    // Transpiration links
+    L1 -> TRANSP [style="dashed", color="#dc3545"];
+
+    LN -> TRANSP [st
+
+    LN -> RECHARGE;
 }
