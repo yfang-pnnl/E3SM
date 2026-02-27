@@ -61,20 +61,19 @@ $$q_{intr,\,liq} = f_{pi,\,liq} \ q_{rain}$$
 $$q_{intr,\,ice} = f_{pi,\,ice} \ q_{sno}$$
 
 where $f_{pi,\,liq}$ and $f_{pi,\,ice}$ are the fractions of intercepted
-precipitation of rain and snow, respectively
+precipitation of rain and snow, respectively. In ELM a single coefficient
+applies to both phases
+(`Lawrence et al. 2007 <Lawrenceetal2007>`{.interpreted-text role="ref"})
 
-$$f_{pi,\,liq} = \alpha_{liq} \ tanh \left(L+S\right)$$
+$$f_{pi} = 0.25\left(1 - \exp\left[-0.5\left(L+S\right)\right]\right)$$
 
-$$f_{pi,\,ice} =\alpha_{sno} \ \left\(1-\exp \left[-0.5\left(L+S\right)\right]\right\) $$
-
-and $L$ and $S$ are the exposed leaf and stem area index, respectively
-(section `Phenology and vegetation burial by snow`{.interpreted-text
-role="numref"}), and the $\alpha$\'s scale the fractional area of a leaf
-that collects water
-(`Lawrence et al. 2007 <Lawrenceetal2007>`{.interpreted-text
-role="ref"}). Default values of $\alpha_{liq}$ and $\alpha_{sno}$ are
-set to 1. Throughfall ($kg\ m^{-2} s^{-1}$) is also divided into liquid and
-solid phases, reaching the ground (soil or snow surface) as
+so that $f_{pi,\,liq} = f_{pi,\,ice} = f_{pi}$, and $L$ and $S$ are the
+exposed leaf and stem area index, respectively (section
+`Phenology and vegetation burial by snow`{.interpreted-text
+role="numref"}). Canopy water is tracked as a single combined store
+$h_{can}$ (liquid plus intercepted snow) rather than separate liquid and
+ice reservoirs. Throughfall ($kg\ m^{-2} s^{-1}$) is also divided into
+liquid and solid phases, reaching the ground (soil or snow surface) as
 
 $$q_{thru,\, liq} = q_{rain} \left(1 - f_{pi,\,liq}\right)$$
 
@@ -120,6 +119,14 @@ $$q_{unl,\, wind} =\frac{u W_{can,sno}}{1.56\times 10^5 \text{ m}}$$
 $$q_{unl,\, temp} =\frac{W_{can,sno}(T-270 \textrm{ K})}{1.87\times 10^5 \text{ K s}} > 0$$
 
 $$q_{unl,\, tot} =\min \left( q_{unl,\, wind} +q_{unl,\, temp} ,W_{can,\, sno} \right)$$
+
+> **Note (ELM):** The wind- and temperature-driven snow unloading
+> parameterization above follows the CLM5 description
+> (`Roesch et al. 2001 <Roeschetal2001>`{.interpreted-text role="ref"})
+> but is not implemented in the current ELM `CanopyHydrologyMod.F90`.
+> In ELM, canopy drip is simply the excess of $h_{can}$ above the
+> storage capacity $h_{can,\max} = p_{liq}(L+S)$, with no explicit
+> phase separation or unloading terms.
 
 The canopy liquid water and snow water equivalent are updated as
 
@@ -210,6 +217,61 @@ f_{\text{can,\,sno}} =
 \end{cases}
 $$
 
+### Snow-Covered Area Fraction
+
+The fraction of ground covered by snow $f_{sno}$ is updated at each
+time step from changes in snow water equivalent. During accumulation
+events (new snow $>0$), the fraction is updated as
+
+$$f_{sno} = 1 - \left(1 - \tanh\!\left(c_{accum}\,q_{sno}^{grnd}\Delta t\right)\right)\left(1 - f_{sno}^{n}\right)$$
+
+where $c_{accum}=0.1$ $mm^{-1}$. During melt the parameterization tracks
+the ratio of current SWE to the integrated accumulated snowfall
+$h_{sno}^{int}$ since the onset of the snow season:
+
+$$f_{sno} = 1 - \left[\frac{1}{\pi}\arccos\!\left(\min\!\left(1,\ 2\,\frac{h_{sno}}{h_{sno}^{int}} - 1\right)\right)\right]^{n_{melt}}$$
+
+where $n_{melt}$ is a shape parameter read from the surface dataset.
+
+A legacy alternative is available by setting `oldfflag=1` in the
+`elm_canopyhydrology_inparm` namelist group
+(`Niu and Yang 2007 <NiuYang2007>`{.interpreted-text role="ref"}):
+
+$$f_{sno} = \tanh\!\left(\frac{z_{sno}}{2.5\,z_{lnd}\left(\bar{\rho}_{sno}/100\right)}\right)$$
+
+where $z_{sno}$ (m) is snow depth, $z_{lnd}=0.01$ m is the ground
+roughness length, and $\bar{\rho}_{sno}$ ($kg\ m^{-3}$) is the bulk snow
+density. When `subgridflag=1`, snow depth is distributed sub-grid so
+that $z_{sno} = h_{sno}/(\rho_{sno}\,f_{sno})$ rather than assuming
+uniform snow coverage.
+
+### Irrigation
+
+When the `irrigate` namelist flag is enabled, irrigation water is added
+directly to liquid precipitation reaching the ground (bypassing canopy
+interception). ELM supports two coupling modes:
+
+**One-way coupling** (`tw_irr=false`, default): Irrigation demand
+$q_{irr}$ ($mm\ s^{-1}$) is computed within ELM and partitioned into a
+surface-water component and a groundwater component using grid-cell
+fractions $f_{surf}$ and $f_{grd}$:
+
+$$q_{surf,irr} = f_{surf}\,q_{irr}, \qquad q_{grnd,irr} = f_{grd}\,q_{irr}$$
+
+Irrigation is applied for `n_irrig_steps_left` time steps after the
+scheduled irrigation event.
+
+**Two-way coupling** (`tw_irr=true`): Surface-water supply
+$q_{surf,irr}$ is provided by MOSART routing; groundwater
+$q_{grnd,irr} = f_{grd}\,q_{irr}$ is drawn from ELM sub-surface
+stores based on ELM demand. If `extra_gw_irr=true`, any surface-water
+deficit reported by MOSART is supplemented by additional groundwater
+extraction. The total irrigation flux applied to the ground is
+
+$$q_{real,irr} = q_{surf,irr} + q_{grnd,irr}$$
+
+and is added to $q_{grnd,liq}$ before infiltration is computed.
+
 ## Surface Runoff, Surface Water Storage, and Infiltration
 
 The moisture input at the grid cell surface,$q_{liq,\, 0}$, is the sum
@@ -263,6 +325,65 @@ additional details. In ELM, $f_{over}$ is the grid-cell parameter $f_{drain}$ ($
 read from the surface dataset (fallback default 2.5 $m^{-1}$; see also
 section `Lateral Sub-surface Runoff`{.interpreted-text role="numref"}
 where the same decay factor governs sub-surface drainage).
+
+### VIC Alternative: Surface Runoff and Infiltration
+
+When `use_vichydro = .true.`, the SIMTOP saturated-fraction and
+infiltration-excess formulations are replaced by the Variable Infiltration
+Capacity (VIC) model
+(`Wood et al. 1992 <Woodetal1992>`{.interpreted-text role="ref"};
+`Liang et al. 1994 <Liangetal1994>`{.interpreted-text role="ref"}).
+Soil layers are grouped into three VIC layers: the top `nlvic(1)` ELM
+layers form VIC layer 1, the next `nlvic(2)` layers form VIC layer 2,
+and the remainder form VIC layer 3.
+
+**Saturated fraction.** Total soil moisture and field capacity are
+aggregated over the top $N_l - 1$ hydrologically active layers:
+
+$$W_{top} = \sum_{j=1}^{N_l-1}\bigl(\theta_{liq,j}+\theta_{ice,j}\bigr)\,\Delta z_j,
+\qquad
+W_{top,max} = \sum_{j=1}^{N_l-1}\theta_{sat,j}\,\Delta z_j$$
+
+The VIC probability-distribution model gives the saturated fraction
+(which replaces the TOPMODEL $f_{sat}$):
+
+$$f_{sat} = A = 1 - \left(1 - \frac{W_{top}}{W_{top,max}}\right)^{\frac{b}{1+b}}$$
+
+where $b$ is the VIC infiltration shape parameter (`b_infil`, read from
+the surface dataset).
+
+**Infiltration capacity and surface runoff.** The maximum infiltration
+capacity $i_m$ and the current point $i_0$ on the infiltration-capacity
+curve are
+
+$$i_m = (1+b)\,W_{top,max},
+\qquad
+i_0 = i_m\left[1 - \left(1-A\right)^{1/b}\right]$$
+
+Surface runoff for the unsaturated fraction follows
+`Wood et al. (1992) <Woodetal1992>`{.interpreted-text role="ref"} Eq.\ (3).
+If the incoming water $i_0 + q_{in,soil}\,\Delta t$ exceeds $i_m$
+(fully saturated case, Eq.\ 3a):
+
+$$q_{over,VIC} =
+  \frac{q_{in,soil}\,\Delta t - W_{top,max} + W_{top}}{\Delta t}$$
+
+Otherwise (partially saturated case, Eq.\ 3b):
+
+$$q_{over,VIC} =
+  \frac{q_{in,soil}\,\Delta t - W_{top,max} + W_{top}
+        + W_{top,max}\!\left(1 - \dfrac{i_0 + q_{in,soil}\,\Delta t}{i_m}\right)^{1+b}}
+       {\Delta t}$$
+
+The maximum infiltration rate that bounds infiltration into the soil
+(replacing the $k_{sat}$-based limit used in the default scheme) is
+
+$$q_{infl,max} =
+  (1 - f_{sat})\,10^{-\Omega F_{ice,top}}\,(q_{in,soil} - q_{over,VIC})$$
+
+where $F_{ice,top} = \min\!\left(1,\,W_{ice,top}/W_{top,max}\right)$ is
+the ice fraction of the top layers and $\Omega = 6$ is the ice impedance
+exponent.
 
 ### Surface Water Storage
 
@@ -324,6 +445,27 @@ $f_{h2osfc} =f_{c}$, and $\Delta t$ is the model time step. The linear
 storage coefficent $k_{h2osfc} = \sin \left(\beta \right)$ is a function
 of grid cell mean topographic slope where $\beta$ is the slope in
 radians.
+
+For columns over polygonal tundra landforms (activated automatically
+when the column flag `ispolygon` is set), the Gaussian microtopography
+model is replaced by a polygon-geometry parameterization. The inundated
+fraction and mean water depth $d$ are computed from the ice-wedge
+polygon (IWP) attributes: depression depth $d_{dep}$
+($m$), microtopographic relief $r_{iwp}$ ($m$), and the excluded volume
+of troughs $V_{excl}$ ($m$). For $W_{sfc} \le r_{iwp} - V_{excl}$,
+$d$ is found iteratively (Newton-Raphson) from the cubic polynomial
+
+$$W_{sfc} = \left(2V_{excl} - r_{iwp}\right)\left(\frac{d}{r_{iwp}}\right)^3
+            + \left(2r_{iwp} - 3V_{excl}\right)\left(\frac{d}{r_{iwp}}\right)^2$$
+
+and the inundated fraction follows
+
+$$f_{h2osfc} = \frac{3}{r_{iwp}}\left(2V_{excl}-r_{iwp}\right)\left(\frac{d}{r_{iwp}}\right)^2
+              + \frac{2}{r_{iwp}}\left(2r_{iwp}-3V_{excl}\right)\frac{d}{r_{iwp}}.$$
+
+This formulation better represents the threshold-like inundation
+behaviour of low-centre polygonal tundra, where ponding concentrates
+in polygon interiors before spilling into troughs.
 
 ### Infiltration
 
@@ -993,6 +1135,45 @@ $$w_{ice,\, 1}^{n+1} =w_{ice,\, 1}^{n} +q_{frost} \Delta t$$
 $$w_{ice,\, 1}^{n+1} =w_{ice,\, 1}^{n} -q_{subl} \Delta t.$$
 
 Sublimation of ice is limited to the amount of ice available.
+
+### VIC Alternative: Baseflow
+
+When `use_vichydro = .true.`, the TOPMODEL exponential baseflow is
+replaced by the ARNO non-linear baseflow model
+(`Franchini and Pacciani 1991 <FranchiniPacciani1991>`{.interpreted-text
+role="ref"}) applied to the deepest hydrologically active soil layer
+($j = N_l$).
+
+The ice impedance factor uses only the ice fraction of that layer:
+
+$$\Theta_{ice} = 10^{-\Omega\,\min\!\left(1,\,\theta_{ice,N_l}/\theta_{sat,N_l}\right)}$$
+
+The maximum baseflow velocity $D_{smax}$ (mm day$^{-1}$) and the
+normalised moisture of the deepest layer
+
+$$W^{*} = \frac{\theta_{liq,N_l} - \theta_{min}}{\theta_{sat,N_l} - \theta_{min}}$$
+
+define the ARNO baseflow:
+
+$$q_{drai,VIC} = \Theta_{ice}
+  \left[
+    \frac{D_s\,D_{smax}}{W_s}\,W^{*}
+    \;+\;
+    D_{smax}\!\left(1 - \frac{D_s}{W_s}\right)
+    \!\left(\frac{W^{*} - W_s}{1 - W_s}\right)^{c}\,
+    \mathbf{1}_{[W^{*} > W_s]}
+  \right]$$
+
+where $D_s$ is the fraction of $D_{smax}$ at which non-linear baseflow
+begins, $W_s$ is the fraction of maximum soil moisture at which
+non-linear flow begins, and $c$ is the baseflow exponent. The four
+parameters $D_{smax}$, $D_s$, $W_s$, and $c$ are read from the surface
+dataset. The product $D_s\,D_{smax}/W_s$ is the linear baseflow
+coefficient active at all moisture levels; the second term adds
+non-linear drainage once $W^{*}$ exceeds $W_s$.
+
+> **Note:** The H3D hydrology variant is not compatible with
+> `use_vichydro`; the model will abort if both are active.
 
 ## Runoff from glaciers and snow-capped surfaces
 
