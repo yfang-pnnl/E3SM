@@ -509,6 +509,8 @@ module ColumnDataType
     real(r8), pointer :: qflx_runoff_r        (:)   => null() ! Rural total runoff (qflx_drain+qflx_surf+qflx_qrgwl) (mm H2O /s)
     real(r8), pointer :: qflx_runoff_u        (:)   => null() ! urban total runoff (qflx_drain+qflx_surf) (mm H2O /s)
     real(r8), pointer :: qflx_rsub_sat        (:)   => null() ! soil saturation excess [mm/s]
+    real(r8), pointer :: qflx_rsub_sat_h3d    (:)   => null() ! soil saturation excess from h3d [mm/s]
+    real(r8), pointer :: qflx_drain_h3d       (:)   => null() ! sub-surface runoff from h3d (mm H2O /s)
     real(r8), pointer :: qflx_snofrz_lyr      (:,:) => null() ! snow freezing rate (positive definite) (col,lyr) [kg m-2 s-1]
     real(r8), pointer :: qflx_snofrz          (:)   => null() ! column-integrated snow freezing rate (positive definite) (col) [kg m-2 s-1]
     real(r8), pointer :: qflx_glcice          (:)   => null() ! net flux of new glacial ice (growth - melt) (mm H2O/s), passed to GLC
@@ -1387,7 +1389,7 @@ contains
   !------------------------------------------------------------------------
   subroutine col_ws_init(this, begc, endc, h2osno_input, snow_depth_input, watsat_input)
     !
-    use elm_varctl  , only : use_lake_wat_storage, use_arctic_init
+    use elm_varctl  , only : use_lake_wat_storage, use_arctic_init, use_h3d
     ! !ARGUMENTS:
     class(column_water_state) :: this
     integer , intent(in)      :: begc,endc
@@ -1752,6 +1754,12 @@ contains
                       this%h2osoi_vol(c,j) = 0.70_r8*watsat_input(c,j) !0.15_r8 to avoid very dry conditions that cause errors in FATES
                    else if (use_arctic_init) then
                       this%h2osoi_vol(c,j) = watsat_input(c,j) ! start saturated for arctic
+                   else if (use_h3d) then
+                      if (j < 5) then
+                         this%h2osoi_vol(c,j) = watsat_input(c,j) * 0.6
+                      else
+                         this%h2osoi_vol(c,j) = watsat_input(c,j)
+                      endif
                    else
                       this%h2osoi_vol(c,j) = 0.15_r8
                    endif
@@ -5834,6 +5842,8 @@ contains
     allocate(this%qflx_runoff_r          (begc:endc))             ; this%qflx_runoff_r        (:)   = spval
     allocate(this%qflx_runoff_u          (begc:endc))             ; this%qflx_runoff_u        (:)   = spval
     allocate(this%qflx_rsub_sat          (begc:endc))             ; this%qflx_rsub_sat        (:)   = spval
+    allocate(this%qflx_rsub_sat_h3d      (begc:endc))             ; this%qflx_rsub_sat_h3d    (:)   = spval
+    allocate(this%qflx_drain_h3d         (begc:endc))             ; this%qflx_drain_h3d       (:)   = spval
     allocate(this%qflx_snofrz_lyr        (begc:endc,-nlevsno+1:0)); this%qflx_snofrz_lyr      (:,:) = spval
     allocate(this%qflx_snofrz            (begc:endc))             ; this%qflx_snofrz          (:)   = spval
     allocate(this%qflx_glcice            (begc:endc))             ; this%qflx_glcice          (:)   = spval

@@ -58,6 +58,7 @@ module ColumnType
      integer, pointer  :: nlevbed       (:) => null() ! number of layers to bedrock
      real(r8), pointer :: zibed         (:) => null() ! bedrock depth in model (interface level at nlevbed)
      real(r8), pointer :: meangradz     (:) => null() ! mean topographic gradient at the column level
+     real(r8), pointer :: h3d_slope     (:) => null() ! gridcell topographic slope
 
      ! vertical levels
      integer , pointer :: snl          (:)   => null() ! number of snow layers
@@ -68,6 +69,9 @@ module ColumnType
      real(r8), pointer :: dz_lake      (:,:) => null() ! lake layer thickness (m)  (1:nlevlak)
      real(r8), pointer :: z_lake       (:,:) => null() ! layer depth for lake (m)
      real(r8), pointer :: lakedepth    (:)   => null() ! variable lake depth (m)
+
+     real(r8), pointer :: f_drain      (:)   => null() ! drainable porosity, now = specific porosity s_y
+     real(r8), pointer :: dt_h3d       (:)   => null() ! h3d iteration timestep (s)
 
      ! other column characteristics
      logical , pointer :: hydrologically_active(:) => null()  ! true if this column is a hydrologically active type
@@ -80,6 +84,9 @@ module ColumnType
      logical, pointer :: is_soil(:) => null()  ! True if the column is a soil
      logical, pointer :: is_crop(:) => null()  ! True if the column is a crop
      logical, pointer :: is_lake(:) => null()  ! True if the column is a lake
+
+     ! Is this an h3D column?
+     logical, pointer :: h3d_active(:) => null() ! true if this column is an h3D soil column
 
    contains
 
@@ -138,8 +145,12 @@ contains
     allocate(this%nlevbed     (begc:endc))                     ; this%nlevbed     (:)   = ispval
     allocate(this%zibed       (begc:endc))                     ; this%zibed       (:)   = spval
     allocate(this%meangradz   (begc:endc))                     ; this%meangradz   (:)   = spval
+    allocate(this%h3d_slope   (begc:endc))                     ; this%h3d_slope   (:)   = spval
+    allocate(this%f_drain     (begc:endc))                     ; this%f_drain     (:)   = spval
+    allocate(this%dt_h3d      (begc:endc))                     ; this%dt_h3d      (:)   = spval
 
     allocate(this%hydrologically_active(begc:endc))            ; this%hydrologically_active(:) = .false.
+    allocate(this%h3d_active  (begc:endc))                     ; this%h3d_active  (:)   = .false.
 
     ! Assume that columns are not fates columns until fates initialization begins
     allocate(this%is_fates(begc:endc)); this%is_fates(:) = .false.
@@ -185,11 +196,15 @@ contains
     deallocate(this%nlevbed    )
     deallocate(this%zibed      )
     deallocate(this%meangradz     )
+    deallocate(this%h3d_slope  )
+    deallocate(this%f_drain    )
+    deallocate(this%dt_h3d     )
     deallocate(this%hydrologically_active)
     deallocate(this%is_fates)
     deallocate(this%is_soil)
     deallocate(this%is_crop)
     deallocate(this%is_lake)
+    deallocate(this%h3d_active )
 
   end subroutine col_pp_clean
 

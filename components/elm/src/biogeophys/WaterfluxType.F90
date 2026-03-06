@@ -119,6 +119,10 @@ module WaterfluxType
      real(r8), pointer :: qflx_over_supply_col     (:)   ! col over supplied irrigation 
      integer , pointer :: n_irrig_steps_left_patch (:)   ! number of time steps for which we still need to irrigate today (if 0, ignore)
 
+     ! For h3D
+     real(r8), pointer :: qflx_rsub_sat_h3dcol     (:)   ! h3dcol soil saturation excess [mm/s]
+     real(r8), pointer :: qflx_drain_h3dcol        (:)   ! h3dcol sub-surface runoff (mm H2O/s) [mm/s]
+
      ! For VSFM
      real(r8), pointer :: mflx_infl_col_1d         (:)   ! infiltration source in top soil control volume (kg H2O /s)
      real(r8), pointer :: mflx_dew_col_1d          (:)   ! liquid+snow dew source in top soil control volume (kg H2O /s)
@@ -283,6 +287,9 @@ contains
     allocate(this%qflx_irr_demand_col      (begc:endc))              ; this%qflx_irr_demand_col      (:)   = nan
     allocate(this%irrig_rate_patch         (begp:endp))              ; this%irrig_rate_patch         (:)   = nan
     allocate(this%n_irrig_steps_left_patch (begp:endp))              ; this%n_irrig_steps_left_patch (:)   = 0
+
+    allocate(this%qflx_rsub_sat_h3dcol     (begc:endc))              ; this%qflx_rsub_sat_h3dcol     (:)   = 0._r8
+    allocate(this%qflx_drain_h3dcol        (begc:endc))              ; this%qflx_drain_h3dcol        (:)   = 0._r8
 
     allocate(this%qflx_snow2topsoi_col     (begc:endc))              ; this%qflx_snow2topsoi_col     (:)   = nan
     allocate(this%qflx_h2osfc2topsoi_col   (begc:endc))              ; this%qflx_h2osfc2topsoi_col   (:)   = nan

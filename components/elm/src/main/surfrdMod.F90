@@ -1200,7 +1200,7 @@ contains
           end do
         end do
 
-        call check_sums_equal_1(wt_h3dc, begg, 'wt_h3dc', subname)
+        call check_sums_equal_1_2d(wt_h3dc, begg, 'wt_h3dc', subname)
         deallocate(hs_x,hs_w,hs_area)
         deallocate(tmp_hs_x,tmp_hs_w)
      end if
