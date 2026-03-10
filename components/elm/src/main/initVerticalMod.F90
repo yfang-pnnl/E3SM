@@ -16,11 +16,11 @@ module initVerticalMod
   use elm_varpar     , only : toplev_equalspace, nlev_equalspace
   use elm_varpar     , only : nlevsoi, nlevsoifl, nlevurb, nlevslp
   use elm_varpar     , only : nlevdecomp, scalez, zecoeff
-  use elm_varpar     , only : nh3dc_per_lunit, h3d_hs_length
+  use elm_varpar     , only : nh3dc_per_lunit
   use elm_varctl     , only : fsurdat, iulog, use_var_soil_thick
   use elm_varctl     , only : use_vancouver, use_mexicocity, use_vertsoilc, use_extralakelayers, use_extrasnowlayers
   use elm_varctl     , only : use_erosion, use_polygonal_tundra, use_h3d
-  use elm_varcon     , only : zlak, dzlak, zsoi, dzsoi, zisoi, dzsoi_decomp, spval, grlnd
+  use elm_varcon     , only : zlak, dzlak, zsoi, dzsoi, zisoi, dzsoi_decomp, spval, grlnd, rpi
   use column_varcon  , only : icol_roof, icol_sunwall, icol_shadewall, icol_road_perv, icol_road_imperv
   use landunit_varcon, only : istdlak, istice_mec
   use landunit_varcon, only : istsoil
@@ -69,12 +69,10 @@ contains
     real(r8) ,pointer     :: tslope (:)        ! read in - topo_slope
     real(r8) ,pointer     :: gradz(:)          ! read in - gradz (polygonal tundra only)
     real(r8) ,pointer     :: hslp_p10 (:,:,:)    ! read in - hillslope slope percentiles
-    real(r8) ,pointer     :: hs_w (:,:)          ! hillslope width function at interface
-    real(r8) ,pointer     :: hs_x (:,:)          ! hillslope x coords at interface
-    real(r8), pointer     :: tmp_hs_x(:)         ! local 1D array
-    real(r8), pointer     :: tmp_hs_w(:)         ! local 1D array
-    real(r8)              :: sum_tmp_hs_w        ! temporary sum
-    real(r8)              :: hs_w_scale          ! hillslope width scale factor
+    real(r8) ,pointer     :: hs_w (:,:)          ! hillslope_width read from surface file (m)
+    real(r8) ,pointer     :: hs_x (:,:)          ! hillslope_distance read from surface file (m)
+    real(r8) ,pointer     :: hs_dA(:,:)          ! hillslope_area read from surface file (m2)
+    real(r8) ,pointer     :: hs_slp(:,:)         ! hillslope_slope read from surface file (m/m)
     real(r8) ,pointer     :: dtb (:,:)           ! read in - DTB
     real(r8)              :: beddep            ! temporary
     integer               :: nlevbed           ! temporary
@@ -612,67 +610,86 @@ contains
       
       end if
 
-      !--------------------------------------------------------
-      ! Read in hillslope width function for vegetated landunit
-      !--------------------------------------------------------
+      !-------------------------------------------------------------------
+      ! Read hillslope geometry for h3d landunits from surface dataset.
+      ! Variables hillslope_distance, hillslope_width, hillslope_area, and
+      ! hillslope_slope are (nmaxhillcol, gridcell) — per-column per-gridcell.
+      ! Applied only to the istsoil (vegetated) landunit.
+      !-------------------------------------------------------------------
       if (use_h3d) then
-        allocate(hs_x(bounds%begg:bounds%endg,1:nh3dc_per_lunit+1))
-        allocate(hs_w(bounds%begg:bounds%endg,1:nh3dc_per_lunit+1))
-        allocate(tmp_hs_x(1:nh3dc_per_lunit+1))
-        allocate(tmp_hs_w(1:nh3dc_per_lunit+1))
-        sum_tmp_hs_w = 0._r8
-        do i=1,nh3dc_per_lunit+1
-          tmp_hs_x(i) = h3d_hs_length / float(nh3dc_per_lunit) * float(i-1)
-          tmp_hs_w(i) = exp(tmp_hs_x(i))   !convergent
-          sum_tmp_hs_w = sum_tmp_hs_w + tmp_hs_w(i)
-        end do
-        do j=1,nh3dc_per_lunit+1
-          hs_x(bounds%begg:bounds%endg,j) = tmp_hs_x(j) * 1.e3_r8
-          hs_w(bounds%begg:bounds%endg,j) = tmp_hs_w(j) / sum_tmp_hs_w
-        end do
-        hs_x(bounds%begg:bounds%endg,2) = 0.5_r8 * hs_x(bounds%begg:bounds%endg,2)
-        call ncd_io(ncid=ncid, varname='hs_w', flag='read', data=hs_w, dim1name=grlnd, readvar=readvar)
+        allocate(hs_x  (bounds%begg:bounds%endg,1:nh3dc_per_lunit))
+        allocate(hs_w  (bounds%begg:bounds%endg,1:nh3dc_per_lunit))
+        allocate(hs_dA (bounds%begg:bounds%endg,1:nh3dc_per_lunit))
+        allocate(hs_slp(bounds%begg:bounds%endg,1:nh3dc_per_lunit))
+
+        call ncd_io(ncid=ncid, varname='hillslope_distance', flag='read', &
+             data=hs_x, dim1name=grlnd, readvar=readvar)
         if (.not. readvar) then
-           call shr_sys_abort(' ERROR: HILLSLOPE WIDTH FUNCTION NOT on surfdata file'//errMsg(__FILE__,__LINE__))
+           call shr_sys_abort(' ERROR: hillslope_distance NOT on surfdata file'//errMsg(__FILE__,__LINE__))
         end if
-        call ncd_io(ncid=ncid, varname='hs_x', flag='read', data=hs_x, dim1name=grlnd, readvar=readvar)
+
+        call ncd_io(ncid=ncid, varname='hillslope_width', flag='read', &
+             data=hs_w, dim1name=grlnd, readvar=readvar)
         if (.not. readvar) then
-           call shr_sys_abort(' ERROR: HILLSLOPE WIDTH FUNCTION NOT on surfdata file'//errMsg(__FILE__,__LINE__))
+           call shr_sys_abort(' ERROR: hillslope_width NOT on surfdata file'//errMsg(__FILE__,__LINE__))
         end if
+
+        call ncd_io(ncid=ncid, varname='hillslope_area', flag='read', &
+             data=hs_dA, dim1name=grlnd, readvar=readvar)
+        if (.not. readvar) then
+           call shr_sys_abort(' ERROR: hillslope_area NOT on surfdata file'//errMsg(__FILE__,__LINE__))
+        end if
+
+        ! hillslope_slope is per-column (m/m); convert to degrees for the solver
+        call ncd_io(ncid=ncid, varname='hillslope_slope', flag='read', &
+             data=hs_slp, dim1name=grlnd, readvar=readvar)
+        if (.not. readvar) then
+           write(iulog,*) 'hillslope_slope not on surfdata; falling back to topo_slope'
+        end if
+
         do l = begl,endl
           if (lun_pp%itype(l) == istsoil) then
              g = lun_pp%gridcell(l)
-             lun_pp%hs_w_itf(l,:) = hs_w(g,:)
-             lun_pp%hs_x_itf(l,:) = hs_x(g,:)
              lun_pp%hs_area(l) = 0._r8
              do k=1,nh3dc_per_lunit
-               lun_pp%hs_dx(l,k) = hs_x(g,k+1) - hs_x(g,k)
-               lun_pp%hs_x_nod(l,k) = 0.5_r8*(hs_x(g,k+1)+hs_x(g,k))
-               lun_pp%hs_w_nod(l,k) = 0.5_r8*(hs_w(g,k+1)+hs_w(g,k))
-               lun_pp%hs_dA(l,k) = lun_pp%hs_w_nod(l,k) * lun_pp%hs_dx(l,k)
-               lun_pp%hs_area(l) = lun_pp%hs_area(l) + lun_pp%hs_dA(l,k)
+               lun_pp%hs_x_nod(l,k) = hs_x(g,k)
+               lun_pp%hs_w_nod(l,k) = hs_w(g,k)
+               lun_pp%hs_dA(l,k)    = hs_dA(g,k)
+               lun_pp%hs_area(l)    = lun_pp%hs_area(l) + hs_dA(g,k)
+               ! dx from column area and width
+               if (hs_w(g,k) > 0._r8) then
+                  lun_pp%hs_dx(l,k) = hs_dA(g,k) / hs_w(g,k)
+               else
+                  lun_pp%hs_dx(l,k) = 0._r8
+               end if
              end do
-             hs_w_scale = ldomain%area(g) * lun_pp%wtgcell(l) * 1.e6_r8 / lun_pp%hs_area(l)
-             lun_pp%hs_w_itf(l,:) = hs_w_scale * lun_pp%hs_w_itf(l,:)
-             lun_pp%hs_w_nod(l,:) = hs_w_scale * lun_pp%hs_w_nod(l,:)
-             write(*,*) 'read hs width function...'
-             write(*,*) l,ldomain%area(g),lun_pp%wtgcell(l),lun_pp%hs_area(l)
-             lun_pp%hs_area(l) = 0._r8
-             do k=1,nh3dc_per_lunit
-               lun_pp%hs_dA(l,k) = lun_pp%hs_w_nod(l,k) * lun_pp%hs_dx(l,k)
-               lun_pp%hs_area(l) = lun_pp%hs_area(l) + lun_pp%hs_dA(l,k)
-             end do
-             lun_pp%hs_dx_node(l,1) = 0.5*lun_pp%hs_dx(l,1)
+             ! dx_node(k): distance from node k-1 to node k (for k>=2), or
+             !             distance from channel (x=0) to node 1 (for k=1).
+             ! hillslope_distance is the center-of-mass of each column from the
+             ! channel, so node 1's distance from the channel is hs_x_nod(l,1).
+             lun_pp%hs_dx_node(l,1) = lun_pp%hs_x_nod(l,1)
              do k=2,nh3dc_per_lunit
                lun_pp%hs_dx_node(l,k) = lun_pp%hs_x_nod(l,k) - lun_pp%hs_x_nod(l,k-1)
              end do
-             if (abs(lun_pp%hs_area(l) - 1.e6_r8*ldomain%area(g)*lun_pp%wtgcell(l))>1.e-1) then
-                call shr_sys_abort(' ERROR: INCONSISTANCE AREA OF H3D HILLSLOPE'//errMsg(__FILE__,__LINE__))
-             end if
           end if
-        enddo
-        deallocate(hs_x,hs_w)
-        deallocate(tmp_hs_x,tmp_hs_w)
+        end do
+
+        ! Per-column slope (degrees) assigned to each h3d column
+        do c = begc,endc
+          l = col_pp%landunit(c)
+          g = col_pp%gridcell(c)
+          if (lun_pp%itype(l) == istsoil .and. col_pp%h3d_active(c)) then
+            k = c - lun_pp%coli(l) + 1
+            if (readvar) then
+              ! hillslope_slope is per-column (m/m) -> degrees
+              col_pp%h3d_slope(c) = atan(max(hs_slp(g,k), 0.002_r8)) * 180._r8 / rpi
+            else
+              col_pp%h3d_slope(c) = atan(max(col_pp%topo_slope(c), 0.002_r8)) * 180._r8 / rpi
+            end if
+          end if
+        end do
+
+        deallocate(hs_x, hs_w, hs_dA, hs_slp)
       endif
 
       !-----------------------------------------------
@@ -706,26 +723,8 @@ contains
          deallocate(gradz)
       end if
 
-      !----------------------------------------------------------
-      ! Read h3D slope map if available; use default slope if not
-      !----------------------------------------------------------
-      if (use_h3d) then
-        allocate(tslope(bounds%begg:bounds%endg))
-        call ncd_io(ncid=ncid, varname='H3D_SLOPE', flag='read', data=tslope, dim1name=grlnd, readvar=readvar)
-        if (.not. readvar) then
-          do c = begc,endc
-             col_pp%h3d_slope(c) = col_pp%topo_slope(c)
-          end do
-        else
-          write(iulog,*) '-----------use h3d slope---------------'
-          do c = begc,endc
-             g = col_pp%gridcell(c)
-             ! check for near zero slopes, set minimum value
-             col_pp%h3d_slope(c) = max(tslope(g), 0.2_r8)
-          end do
-        endif
-        deallocate(tslope)
-      end if
+      ! Note: h3d_slope is now read as hillslope_slope inside the h3d geometry
+      ! block above (together with hillslope_distance/width/area).
 
       allocate(std(bounds%begg:bounds%endg))
       call ncd_io(ncid=ncid, varname='STD_ELEV', flag='read', data=std, dim1name=grlnd, readvar=readvar)

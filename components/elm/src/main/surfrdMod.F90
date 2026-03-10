@@ -1072,7 +1072,7 @@ contains
     use elm_varctl      , only : use_h3d
     use elm_varpar      , only : surfpft_lb, surfpft_ub, surfpft_size, cft_lb, cft_ub, cft_size
     use elm_varpar      , only : crop_prog
-    use elm_varpar      , only : nh3dc_per_lunit, h3d_hs_length
+    use elm_varpar      , only : nh3dc_per_lunit
     use elm_varsur      , only : wt_lunit, wt_nat_patch, wt_cft, fert_cft, fert_p_cft, wt_polygon
     use elm_varsur      , only : wt_h3dc
     use landunit_varcon , only : istsoil, istcrop
@@ -1105,12 +1105,7 @@ contains
     real(r8),pointer :: arrayNF(:,:,:)
     real(r8),pointer :: arrayPF(:,:,:)
     real(r8)         :: hs_area_tot
-    real(r8),pointer :: hs_x(:,:)              ! local 2D array
-    real(r8),pointer :: hs_w(:,:)              ! local 2D array
-    real(r8),pointer :: hs_area(:)             ! local 1D array
-    real(r8),pointer :: tmp_hs_x(:)            ! local 1D array
-    real(r8),pointer :: tmp_hs_w(:)            ! local 1D array
-    real(r8)         :: sum_tmp_hs_w
+    real(r8),pointer :: hs_area(:,:)           ! hillslope area per column (m2) read from surface file
     character(len=32) :: subname = 'surfrd_veg_all'  ! subroutine name
 !-----------------------------------------------------------------------
 
@@ -1157,52 +1152,31 @@ contains
     if (.not. use_h3d) then
         wt_h3dc(begg:endg,1:nh3dc_per_lunit) = 1._r8/nh3dc_per_lunit
     else
-        allocate(hs_x   (begg:endg,1:nh3dc_per_lunit+1))
-        allocate(hs_w   (begg:endg,1:nh3dc_per_lunit+1))
-        allocate(hs_area(          1:nh3dc_per_lunit+1))
+#if 0
+        ! Read per-landunit hillslope column areas from surface file.
+        ! hillslope_area(k,g) is the physical area of h3d column k for the
+        ! istsoil landunit at gridcell g (m2, already scaled by wtgcell).
+        allocate(hs_area(begg:endg,1:nh3dc_per_lunit))
 
-        allocate(tmp_hs_x   (1:nh3dc_per_lunit+1))
-        allocate(tmp_hs_w   (1:nh3dc_per_lunit+1))
-
-        call ncd_io(ncid=ncid, varname='hs_w', flag='read', &
-             data=hs_w, dim1name=grlnd, readvar=readvar)
+        call ncd_io(ncid=ncid, varname='hillslope_area', flag='read', &
+             data=hs_area, dim1name=grlnd, readvar=readvar)
         if (.not. readvar) then
-           call endrun(' ERROR: HILLSLOPE WIDTH FUNCTION NOT on surfdata file'//&
+           call endrun(' ERROR: hillslope_area NOT on surfdata file'//&
                 errMsg(__FILE__, __LINE__))
         end if
-
-        call ncd_io(ncid=ncid, varname='hs_x', flag='read', &
-             data=hs_x, dim1name=grlnd, readvar=readvar)
-        if (.not. readvar) then
-           call endrun(' ERROR: HILLSLOPE WIDTH FUNCTION NOT on surfdata file'//&
-                errMsg(__FILE__, __LINE__))
-        end if
-
-        sum_tmp_hs_w = 0._r8
-        do i=1,nh3dc_per_lunit+1
-          tmp_hs_x(i) = h3d_hs_length / float(nh3dc_per_lunit) * float(i-1)
-          tmp_hs_w(i) = exp( tmp_hs_x(i))   !convergent
-          !tmp_hs_w(i) = exp(-tmp_hs_x(i))   !divergent
-          !tmp_hs_w(i) = 1._r8           !uniform
-          sum_tmp_hs_w = sum_tmp_hs_w + tmp_hs_w(i)
-        end do
 
         do g=begg,endg
-          hs_area_tot = 0._r8
+          hs_area_tot = sum(hs_area(g,1:nh3dc_per_lunit))
           do k=1,nh3dc_per_lunit
-            hs_area(k) = (hs_x(g,k+1) - hs_x(g,k)) * &
-                         (0.5_r8*(hs_w(g,k+1) + hs_w(g,k)))
-            hs_area_tot = hs_area_tot + hs_area(k)
-          end do
-
-          do k=1,nh3dc_per_lunit
-            wt_h3dc(g,k) = hs_area(k) / hs_area_tot
+            wt_h3dc(g,k) = hs_area(g,k) / hs_area_tot
           end do
         end do
 
         call check_sums_equal_1_2d(wt_h3dc, begg, 'wt_h3dc', subname)
-        deallocate(hs_x,hs_w,hs_area)
-        deallocate(tmp_hs_x,tmp_hs_w)
+        deallocate(hs_area)
+#endif
+        ! wt_h3dc is set uniformly; area-based weighting handled in initVerticalMod
+        wt_h3dc(begg:endg,1:nh3dc_per_lunit) = 1._r8/nh3dc_per_lunit
      end if
 
     ! Check the file format for CFT's and handle accordingly
@@ -1960,12 +1934,12 @@ contains
   subroutine surfrd_read_h3d_dims(lfsurdat)
     !-----------------------------------------------------------------------
     ! !DESCRIPTION:
-    ! Open the surface dataset and query the 'nh3dc_itf' dimension to set
-    ! nh3dc_per_lunit = dim_len - 1.  Must be called before any allocations
-    ! that depend on nh3dc_per_lunit.
+    ! Open the surface dataset and query the 'nmaxhillcol' dimension to set
+    ! nh3dc_per_lunit.  Must be called before any allocations that depend on
+    ! nh3dc_per_lunit.
     !
     ! !USES:
-    use elm_varpar , only : nh3dc_per_lunit
+    use elm_varpar , only : nh3dc_per_lunit, nnode_per_nh3dc
     use elm_varctl , only : use_h3d
     use fileutils  , only : getfil
     use spmdMod    , only : masterproc
@@ -1976,22 +1950,23 @@ contains
     ! !LOCAL VARIABLES:
     type(file_desc_t) :: ncid
     integer           :: dimid
-    integer           :: n_itf    ! length of nh3dc_itf dimension (= nh3dc+1)
+    integer           :: n_col    ! length of nmaxhillcol dimension
     character(len=256):: locfn
     !-----------------------------------------------------------------------
 
     if (.not. use_h3d) return
 
     if (masterproc) then
-       write(iulog,*) 'surfrd_read_h3d_dims: reading nh3dc_itf from ',trim(lfsurdat)
+       write(iulog,*) 'surfrd_read_h3d_dims: reading nmaxhillcol from ',trim(lfsurdat)
     end if
 
     call getfil(lfsurdat, locfn, 0)
     call ncd_pio_openfile(ncid, trim(locfn), 0)
-    call ncd_inqdlen(ncid, dimid, n_itf, name='nh3dc_itf')
+    call ncd_inqdlen(ncid, dimid, n_col, name='nmaxhillcol')
     call ncd_pio_closefile(ncid)
 
-    nh3dc_per_lunit = n_itf - 1
+    nh3dc_per_lunit  = n_col
+    nnode_per_nh3dc  = n_col
 
     if (masterproc) then
        write(iulog,*) 'surfrd_read_h3d_dims: nh3dc_per_lunit set to ',nh3dc_per_lunit
