@@ -37,7 +37,7 @@ When `use_IM2_hillslope_hydrology = .true.`, the scheme:
    fraction $f_{\uparrow}$ of the `from_uphill` store is partitioned among
    the soil/crop/pervious-road columns of the receiving topounit in
    proportion to each column's topounit weight, and added to the net water
-   input at the top of the soil profile ($q_{\text{top_soil}}$).
+   input at the top of the soil profile ($q_{\text{top-soil}}$).
 
 The two fractions are hard-coded constants defined in `elm_varcon.F90`:
 
@@ -74,11 +74,11 @@ water downhill; its runoff exits the gridcell normally.
 ### Step 1 — Downhill transfer (in `HydrologyDrainage`)
 
 For every column $c$ on topounit $t$ that has a downhill neighbor
-$t' = \text{downhill_ti}(t)$:
+$t' = \text{downhill-ti}(t)$:
 
 $$
 \begin{aligned}
-q_{\text{to_downhill}}(c)
+q_{\text{to-downhill}}(c)
 &= f_{\downarrow}\,\max\left(0,\,q_{\text{surf}}(c)\right) \\
 &\quad + f_{\downarrow}\,\max\left(0,\,q_{\text{drain,perched}}(c)\right) \\
 &\quad + f_{\downarrow}\,\max\left(0,\,q_{\text{h2osfc,surf}}(c)\right)
@@ -101,7 +101,7 @@ topounit, with an area-weighting factor that converts from the uphill
 column's area to the downhill topounit's area:
 
 $$
-\Delta S_{t'} = q_{\text{to_downhill}}(c)\;\Delta t
+\Delta S_{t'} = q_{\text{to-downhill}}(c)\;\Delta t
 \;\frac{w_c^{\text{gcell}}}{w_{t'}^{\text{gcell}}}
 $$
 
@@ -113,7 +113,7 @@ when topounits differ in areal extent.
 The cumulative update over all columns on all uphill topounits gives:
 
 $$
-S_{t'}^{t} = S_{t'}^{\,t-1} + \sum_{c \in \text{uphill}} \Delta S_{t'}(c)
+S_{t'}^{t} = S_{t'}^{t-1} + \sum_{c \in \text{uphill}} \Delta S_{t'}(c)
 $$
 
 ### Step 2 — Uphill input to columns (in `SurfaceRunoff`)
@@ -131,7 +131,7 @@ $$
 Then, the per-column flux is:
 
 $$
-q_{\text{from_uphill}}(c)
+q_{\text{from-uphill}}(c)
 = \frac{w_c^{\text{topounit}}}{W_t}
 \;\frac{f_{\uparrow}\;S_t}{\Delta t}
 $$
@@ -140,7 +140,7 @@ where $S_t$ is the current `from_uphill` state (kg m⁻²) and $\Delta t$ is
 the model timestep. This flux is added to the net top-of-soil water input:
 
 $$
-q_{\text{top_soil}}(c) \leftarrow q_{\text{top_soil}}(c) + q_{\text{from_uphill}}(c)
+q_{\text{top-soil}}(c) \leftarrow q_{\text{top-soil}}(c) + q_{\text{from-uphill}}(c)
 $$
 
 ### Step 3 — State update (in `BalanceCheck`)
@@ -149,7 +149,7 @@ After the fluxes have been applied the `from_uphill` store is reduced by
 the delivered amount:
 
 $$
-S_t \leftarrow \max\left(0,\;S_t - q_{\text{from_uphill}}(c)\,\Delta t\right)
+S_t \leftarrow \max\left(0,\;S_t - q_{\text{from-uphill}}(c)\,\Delta t\right)
 $$
 
 A floor of $10^{-20}$ kg m⁻² is applied to prevent spurious negative
@@ -167,8 +167,8 @@ check the column error is:
 $$
 \begin{aligned}
 \epsilon(c) &= \Delta W(c) \\
-&\quad - \left(P(c) + q_{\text{flood}}(c) + q_{\text{from_uphill}}(c) + q_{\text{irrig}}(c)\right)\Delta t \\
-&\quad + \left(E(c) + q_{\text{surf}}(c) + q_{\text{h2osfc,surf}}(c) + q_{\text{to_downhill}}(c)\right. \\
+&\quad - \left(P(c) + q_{\text{flood}}(c) + q_{\text{from-uphill}}(c) + q_{\text{irrig}}(c)\right)\Delta t \\
+&\quad + \left(E(c) + q_{\text{surf}}(c) + q_{\text{h2osfc,surf}}(c) + q_{\text{to-downhill}}(c)\right. \\
 &\qquad \left. +\; q_{\text{drain}}(c) + q_{\text{drain,perched}}(c) + q_{\text{snwcp,ice}}(c)\right)\Delta t
 \end{aligned}
 $$
@@ -182,8 +182,8 @@ a mass conservation error.
 | Symbol | Code variable | Units | Description |
 | :----- | :------------ | :---: | :---------- |
 | $S_t$ | `top_ws%from_uphill(t)` | kg m⁻² | Water stored at topounit from uphill transfer |
-| $q_{\text{to_downhill}}$ | `col_wf%qflx_to_downhill(c)` | mm s⁻¹ | Column flux sent to downhill topounit |
-| $q_{\text{from_uphill}}$ | `col_wf%qflx_from_uphill(c)` | mm s⁻¹ | Column flux received from uphill topounit |
+| $q_{\text{to-downhill}}$ | `col_wf%qflx_to_downhill(c)` | mm s⁻¹ | Column flux sent to downhill topounit |
+| $q_{\text{from-uphill}}$ | `col_wf%qflx_from_uphill(c)` | mm s⁻¹ | Column flux received from uphill topounit |
 | $w_c^{\text{topounit}}$ | `col_pp%wttopounit(c)` | — | Column weight relative to topounit |
 | $w_c^{\text{gcell}}$ | `col_pp%wtgcell(c)` | — | Column weight relative to gridcell |
 | $w_t^{\text{gcell}}$ | `top_pp%wtgcell(t)` | — | Topounit weight relative to gridcell |
