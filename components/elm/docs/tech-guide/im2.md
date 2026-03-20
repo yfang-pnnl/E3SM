@@ -77,16 +77,18 @@ For every column $c$ on topounit $t$ that has a downhill neighbor
 $t' = \text{downhill\_ti}(t)$:
 
 $$
+\begin{aligned}
 q_{\text{to\_downhill}}(c)
-= f_{\downarrow}\,\max\!\bigl(0,\,q_{\text{surf}}(c)\bigr)
-+ f_{\downarrow}\,\max\!\bigl(0,\,q_{\text{drain,perched}}(c)\bigr)
-+ f_{\downarrow}\,\max\!\bigl(0,\,q_{\text{h2osfc,surf}}(c)\bigr)
+&= f_{\downarrow}\,\max\left(0,\,q_{\text{surf}}(c)\right) \\
+&\quad + f_{\downarrow}\,\max\left(0,\,q_{\text{drain,perched}}(c)\right) \\
+&\quad + f_{\downarrow}\,\max\left(0,\,q_{\text{h2osfc,surf}}(c)\right)
+\end{aligned}
 $$
 
 The corresponding column fluxes are reduced by the same amount:
 
 $$
-q_{\text{surf}}(c) \mathrel{-}= f_{\downarrow}\,\max(0,\,q_{\text{surf}}(c))
+q_{\text{surf}}(c) \leftarrow q_{\text{surf}}(c) - f_{\downarrow}\,\max\left(0,\,q_{\text{surf}}(c)\right)
 $$
 
 and similarly for $q_{\text{drain,perched}}$ and $q_{\text{h2osfc,surf}}$.
@@ -138,7 +140,7 @@ where $S_t$ is the current `from_uphill` state (kg m⁻²) and $\Delta t$ is
 the model timestep. This flux is added to the net top-of-soil water input:
 
 $$
-q_{\text{top\_soil}}(c) \mathrel{+}= q_{\text{from\_uphill}}(c)
+q_{\text{top\_soil}}(c) \leftarrow q_{\text{top\_soil}}(c) + q_{\text{from\_uphill}}(c)
 $$
 
 ### Step 3 — State update (in `BalanceCheck`)
@@ -147,7 +149,7 @@ After the fluxes have been applied the `from_uphill` store is reduced by
 the delivered amount:
 
 $$
-S_t \leftarrow \max\!\bigl(0,\;S_t - q_{\text{from\_uphill}}(c)\;\Delta t\bigr)
+S_t \leftarrow \max\left(0,\;S_t - q_{\text{from\_uphill}}(c)\,\Delta t\right)
 $$
 
 A floor of $10^{-20}$ kg m⁻² is applied to prevent spurious negative
@@ -163,11 +165,12 @@ The lateral fluxes enter the column water budget explicitly. In the balance
 check the column error is:
 
 $$
-\epsilon(c) = \Delta W(c)
-- \bigl(P(c) + q_{\text{flood}}(c) + q_{\text{from\_uphill}}(c) + q_{\text{irrig}}(c)\bigr)\,\Delta t
-+ \bigl(E(c) + q_{\text{surf}}(c) + q_{\text{h2osfc,surf}}(c)
-        + q_{\text{to\_downhill}}(c) + q_{\text{drain}}(c)
-        + q_{\text{drain,perched}}(c) + q_{\text{snwcp,ice}}(c)\bigr)\,\Delta t
+\begin{aligned}
+\epsilon(c) &= \Delta W(c) \\
+&\quad - \left(P(c) + q_{\text{flood}}(c) + q_{\text{from\_uphill}}(c) + q_{\text{irrig}}(c)\right)\Delta t \\
+&\quad + \left(E(c) + q_{\text{surf}}(c) + q_{\text{h2osfc,surf}}(c) + q_{\text{to\_downhill}}(c)\right. \\
+&\qquad \left. +\; q_{\text{drain}}(c) + q_{\text{drain,perched}}(c) + q_{\text{snwcp,ice}}(c)\right)\Delta t
+\end{aligned}
 $$
 
 where $P$ is precipitation, $E$ is total evapotranspiration, and $\Delta W$
