@@ -426,3 +426,131 @@ After the h3D solve, the model provides:
 - ΔS_sat — change in saturated storage [m]
 
 These outputs replace or augment SIMTOP drainage for h3D-active columns and are fed into the land surface river-routing components of ELM.
+
+## Subgrid Hierarchy
+
+### Original Structure
+
+ELM organizes the land surface into a nested hierarchy within each
+grid cell:
+
+```
+Gridcell (g)
+ └── Topounit (t)            1 to max_topounits per gridcell
+      └── Landunit (l)       up to 12 types per topounit
+           └── Column (c)    1 to N per landunit
+                └── Patch (p) / PFT
+```
+
+**Topounit** represents a topographic sub-division of the grid cell.
+By default there is one topounit per grid cell (`max_topounits = 1`).
+When the surface dataset provides multiple topounits, each carries an
+elevation, fractional area weight, and slope.
+
+**Landunit** represents a distinct land cover category. The full set
+of landunit types (defined in `landunit_varcon.F90`) is:
+
+| Index | Name | Description |
+|:------|:-----|:------------|
+| 1 | `istsoil` | Natural vegetation |
+| 2 | `istcrop` | Crop |
+| 3 | `istice` | Glacier (simple) |
+| 4 | `istice_mec` | Glacier with elevation classes |
+| 5 | `istdlak` | Deep lake |
+| 6 | `istwet` | Wetland |
+| 7 | `isturb_tbd` | Urban — tall building district |
+| 8 | `isturb_hd` | Urban — high density |
+| 9 | `isturb_md` | Urban — medium density |
+
+**Column** is the fundamental hydrological unit. The number of columns
+per landunit depends on the type: `istsoil` has 1 soil column, crop
+has one column per crop functional type, urban has 5 fixed columns
+(roof, sunwall, shadewall, impervious road, pervious road), and
+glacier with elevation classes has one column per class.
+
+**Patch/PFT** represents a plant functional type or bare ground
+within a column.
+
+In the current code, every topounit receives the full complement of
+landunit types. With H3D enabled, the `istsoil` landunit can hold
+`nh3dc_per_lunit` consecutive soil columns representing hillslope
+positions (set from the `nmaxhillcol` dimension in the surface
+dataset). All H3D columns share the same landunit, and the hillslope
+geometry arrays (`hs_x`, `hs_w`, `hs_dA`, `hs_slp`) are stored on
+the landunit indexed by column position `(l, 1:nh3dc_per_lunit)`.
+
+```
+Gridcell (g)
+ ├── Topounit t=1  (elevation, fractional area, slope)
+ │    ├── Landunit: istsoil
+ │    │    └── Columns c0, c0+1, ..., c0+nh3dc_per_lunit-1
+ │    │         (H3D hillslope positions within one landunit)
+ │    ├── Landunit: istcrop  → crop columns
+ │    ├── Landunit: isturb_* → urban columns
+ │    ├── Landunit: istdlak  → lake column
+ │    ├── Landunit: istwet   → wetland column
+ │    └── Landunit: istice   → ice column
+ ├── Topounit t=2
+ │    ├── Landunit: istsoil  → same H3D columns
+ │    ├── Landunit: istcrop  → crop columns  (duplicated)
+ │    ├── ...all other types  (duplicated)
+ │    └── ...
+ ...
+ └── Topounit t=N
+      └── (same full set of landunit types)
+```
+
+Key pointer fields that link entities:
+
+| Level | Parent pointer | Child range |
+|:------|:---------------|:------------|
+| Gridcell | — | `grc_pp%topi(g)` .. `topf(g)` |
+| Topounit | `top_pp%gridcell(t)` | `top_pp%lndi(t)` .. `lndf(t)` |
+| Landunit | `lun_pp%topounit(l)` | `lun_pp%coli(l)` .. `colf(l)` |
+| Column | `col_pp%landunit(c)` | `col_pp%pfti(c)` .. `pftf(c)` |
+
+### Proposed Structure
+
+The proposed design maps each H3D hillslope column to its own
+topounit. Only the `istsoil` (natural vegetation) landunit is placed
+under the hillslope topounits. All non-natural landunit types (crop,
+urban, lake, wetland, ice) are collected into a single additional
+topounit at the end.
+
+```
+Gridcell (g)
+ ├── Topounit t=1  (hillslope bin 1 — stream/outlet)
+ │    └── Landunit: istsoil → 1 soil column → PFT patches
+ ├── Topounit t=2  (hillslope bin 2)
+ │    └── Landunit: istsoil → 1 soil column → PFT patches
+ ├── ...
+ ├── Topounit t=N  (hillslope bin N — divide)
+ │    └── Landunit: istsoil → 1 soil column → PFT patches
+ └── Topounit t=N+1  (non-natural land)
+      ├── Landunit: istcrop  → crop columns
+      ├── Landunit: isturb_* → urban columns
+      ├── Landunit: istdlak  → lake column
+      ├── Landunit: istwet   → wetland column
+      └── Landunit: istice   → ice column
+```
+
+Each hillslope topounit (1 through N) holds exactly one `istsoil`
+landunit with one soil column, corresponding to one H3D hillslope
+position. The topounits are linked by `downhill_ti` connectivity
+(the same mechanism used by IM2) so that future inter-column lateral
+flux calculations can follow the topographic chain from divide to
+stream.
+
+When the number of H3D columns (`nh3dc_per_lunit`) differs from the
+number of topounits in the surface dataset:
+
+- **Aggregation** (more H3D columns than topounits): multiple H3D
+  columns are area-weighted and merged into each topounit bin.
+- **Disaggregation** (fewer H3D columns than topounits): a single
+  H3D column is split across multiple topounits, distributing its
+  properties proportionally.
+
+The last topounit (t = N+1) carries all non-natural landunit types.
+Its fractional area weight accounts for the remaining grid cell area
+not assigned to hillslope bins. This avoids duplicating crop, urban,
+lake, wetland, and ice landunits across every hillslope topounit.
