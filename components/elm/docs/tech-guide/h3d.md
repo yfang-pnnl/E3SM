@@ -512,27 +512,48 @@ Key pointer fields that link entities:
 ### Proposed Structure
 
 The proposed design maps each H3D hillslope column to its own
-topounit. Only the `istsoil` (natural vegetation) landunit is placed
-under the hillslope topounits. All non-natural landunit types (crop,
-urban, lake, wetland, ice) are collected into a single additional
-topounit at the end.
+topounit while preserving the existing array structure. Every
+topounit retains the full complement of landunit types to avoid
+breaking array dimensions, weight normalization, or history output.
+Non-natural landunit types are deactivated (weight = 0) on hillslope
+topounits 1 through N-1 and activated only on the last topounit.
+
+The last topounit (t = N) serves double duty: it is both a hillslope
+column position (e.g., the divide) and the container for all
+non-natural land. Its `istsoil` landunit holds the Nth hillslope
+soil column, while its crop, urban, lake, wetland, and ice landunits
+carry the full grid cell weights for those types.
 
 ```
 Gridcell (g)
  ├── Topounit t=1  (hillslope bin 1 — stream/outlet)
- │    └── Landunit: istsoil → 1 soil column → PFT patches
+ │    ├── Landunit: istsoil   (active, hillslope column 1)
+ │    ├── Landunit: istcrop   (weight=0, inactive)
+ │    ├── Landunit: isturb_*  (weight=0, inactive)
+ │    ├── Landunit: istdlak   (weight=0, inactive)
+ │    ├── Landunit: istwet    (weight=0, inactive)
+ │    └── Landunit: istice    (weight=0, inactive)
  ├── Topounit t=2  (hillslope bin 2)
- │    └── Landunit: istsoil → 1 soil column → PFT patches
+ │    ├── Landunit: istsoil   (active, hillslope column 2)
+ │    └── ... all others weight=0, inactive
  ├── ...
- ├── Topounit t=N  (hillslope bin N — divide)
- │    └── Landunit: istsoil → 1 soil column → PFT patches
- └── Topounit t=N+1  (non-natural land)
-      ├── Landunit: istcrop  → crop columns
-      ├── Landunit: isturb_* → urban columns
-      ├── Landunit: istdlak  → lake column
-      ├── Landunit: istwet   → wetland column
-      └── Landunit: istice   → ice column
+ ├── Topounit t=N-1
+ │    ├── Landunit: istsoil   (active, hillslope column N-1)
+ │    └── ... all others weight=0, inactive
+ └── Topounit t=N  (hillslope bin N — divide + non-natural)
+      ├── Landunit: istsoil   (active, hillslope column N)
+      ├── Landunit: istcrop   (active, full grid crop weight)
+      ├── Landunit: isturb_*  (active, full grid urban weight)
+      ├── Landunit: istdlak   (active, full grid lake weight)
+      ├── Landunit: istwet    (active, full grid wetland weight)
+      └── Landunit: istice    (active, full grid ice weight)
 ```
+
+This approach keeps the existing array structure intact — all
+topounits have all landunit types — and uses zero weights to
+deactivate non-natural types on hillslope topounits. ELM already
+handles zero-weight/inactive landunits; they do not contribute to
+fluxes or area-weighted averages.
 
 Each hillslope topounit (1 through N) holds exactly one `istsoil`
 landunit with one soil column, corresponding to one H3D hillslope
@@ -549,8 +570,3 @@ number of topounits in the surface dataset:
 - **Disaggregation** (fewer H3D columns than topounits): a single
   H3D column is split across multiple topounits, distributing its
   properties proportionally.
-
-The last topounit (t = N+1) carries all non-natural landunit types.
-Its fractional area weight accounts for the remaining grid cell area
-not assigned to hillslope bins. This avoids duplicating crop, urban,
-lake, wetland, and ice landunits across every hillslope topounit.
