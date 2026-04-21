@@ -591,10 +591,11 @@ absorbs all remaining area (crop, urban, lake, wetland, glacier).
 
 **Gridcell conservation check:**
 
+Let $V_k$ = PCT\_NATVEG on topounit $k$ (100% for $k \le N$, 0% for $k = N+1$). Then:
+
 $$
-\sum_{k=1}^{N+1} w_k^B \cdot \frac{\text{PCT\_NATVEG}_{k}}{100}
-= \frac{V_0}{100}, \qquad
-w_{N+1}^B \cdot \frac{C}{100} = \frac{C_{0}}{100}, \quad \ldots
+\sum_{k=1}^{N+1} w_k^B \cdot \frac{V_k}{100} = \frac{V_0}{100}, \qquad
+w_{N+1}^B \cdot \frac{C}{100} = \frac{C_0}{100}, \quad \ldots
 $$
 
 ```
