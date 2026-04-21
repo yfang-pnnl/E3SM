@@ -509,51 +509,41 @@ Key pointer fields that link entities:
 | Landunit | `lun_pp%topounit(l)` | `lun_pp%coli(l)` .. `colf(l)` |
 | Column | `col_pp%landunit(c)` | `col_pp%pfti(c)` .. `pftf(c)` |
 
-### Proposed Structure
+### Proposed Structure (Option A, N topounits)
 
 The proposed design maps each H3D hillslope column to its own
 topounit while preserving the existing array structure. Every
-topounit retains the full complement of landunit types to avoid
-breaking array dimensions, weight normalization, or history output.
-Non-natural landunit types are deactivated (weight = 0) on hillslope
-topounits 1 through N-1 and activated only on the last topounit.
-
-The last topounit (t = N) serves double duty: it is both a hillslope
-column position (e.g., the divide) and the container for all
-non-natural land. Its `istsoil` landunit holds the Nth hillslope
-soil column, while its crop, urban, lake, wetland, and ice landunits
-carry the full grid cell weights for those types.
+topounit retains the full complement of landunit types, and all
+landunits remain active on every topounit. The non-natural land
+cover (crop, urban, lake, wetland, glacier) is replicated identically
+across all N topounits, each carrying the full gridcell percentage
+values. `TopounitFracArea` holds the physical hillslope bin fractions
+and sums to 1 across the N topounits. The weighted average over
+topounits therefore recovers the correct gridcell-level totals for
+all land cover types.
 
 ```
 Gridcell (g)
  ├── Topounit t=1  (hillslope bin 1 — stream/outlet)
  │    ├── Landunit: istsoil   (active, hillslope column 1)
- │    ├── Landunit: istcrop   (weight=0, inactive)
- │    ├── Landunit: isturb_*  (weight=0, inactive)
- │    ├── Landunit: istdlak   (weight=0, inactive)
- │    ├── Landunit: istwet    (weight=0, inactive)
- │    └── Landunit: istice    (weight=0, inactive)
+ │    ├── Landunit: istcrop   (active, full gridcell PCT_CROP)
+ │    ├── Landunit: isturb_*  (active, full gridcell PCT_URBAN)
+ │    ├── Landunit: istdlak   (active, full gridcell PCT_LAKE)
+ │    ├── Landunit: istwet    (active, full gridcell PCT_WETLAND)
+ │    └── Landunit: istice    (active, full gridcell PCT_GLACIER)
  ├── Topounit t=2  (hillslope bin 2)
  │    ├── Landunit: istsoil   (active, hillslope column 2)
- │    └── ... all others weight=0, inactive
+ │    └── ... same full landunit set, all active
  ├── ...
- ├── Topounit t=N-1
- │    ├── Landunit: istsoil   (active, hillslope column N-1)
- │    └── ... all others weight=0, inactive
- └── Topounit t=N  (hillslope bin N — divide + non-natural)
+ └── Topounit t=N  (hillslope bin N — divide)
       ├── Landunit: istsoil   (active, hillslope column N)
-      ├── Landunit: istcrop   (active, full grid crop weight)
-      ├── Landunit: isturb_*  (active, full grid urban weight)
-      ├── Landunit: istdlak   (active, full grid lake weight)
-      ├── Landunit: istwet    (active, full grid wetland weight)
-      └── Landunit: istice    (active, full grid ice weight)
+      └── ... same full landunit set, all active
 ```
 
 This approach keeps the existing array structure intact — all
-topounits have all landunit types — and uses zero weights to
-deactivate non-natural types on hillslope topounits. ELM already
-handles zero-weight/inactive landunits; they do not contribute to
-fluxes or area-weighted averages.
+topounits have all landunit types active — and the H3D solver
+collects the N contiguous `istsoil` columns (one per topounit)
+via the h3d column filter.
 
 Each hillslope topounit (1 through N) holds exactly one `istsoil`
 landunit with one soil column, corresponding to one H3D hillslope
@@ -633,9 +623,9 @@ Gridcell (g)
 
 | Aspect | Option A (N topounits) | Option B (N+1 topounits) |
 |:-------|:-----------------------|:-------------------------|
-| Non-natural land | Carried by topounit N alongside hillslope column N | Isolated in a dedicated topounit N+1 |
-| Topounit N `istsoil` | Active; double-duty (hillslope + non-natural) | Active; pure hillslope only |
-| Topounit N+1 `istsoil` | Does not exist | Inactive (`wttopounit=0`) |
+| Non-natural land | Replicated on every topounit (full gridcell PCT on all N) | Isolated in a dedicated topounit N+1 |
+| `TopounitFracArea` sum | Sums to 1 across N topounits (hillslope bin fractions) | Sums to 1 across N+1 topounits (scaled hillslope + remainder) |
+| All landunits active? | Yes — all landunit types active on all N topounits | Topounits 1…N: only `istsoil` active; topounit N+1: all except `istsoil` |
 | H3D filter | Collects N istsoil columns | Collects N istsoil columns (topounit N+1 excluded by zero weight) |
 | `topoPerGrid` in surfdata | N | N+1 |
 | `nmaxhillcol` in surfdata | N | N (unchanged) |
