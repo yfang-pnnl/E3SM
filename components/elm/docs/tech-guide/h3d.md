@@ -570,3 +570,78 @@ number of topounits in the surface dataset:
 - **Disaggregation** (fewer H3D columns than topounits): a single
   H3D column is split across multiple topounits, distributing its
   properties proportionally.
+
+### Option B Structure (N+1 topounits)
+
+Option B introduces a dedicated **(N+1)-th topounit** that acts as a
+pure non-natural container, separating the hillslope columns cleanly
+from the non-natural land cover types. The surface dataset has
+`topoPerGrid = N+1`, with `nmaxhillcol = N` unchanged.
+
+**Topounit area fractions:**
+
+$$
+w_k^B = w_k^A \cdot \frac{V_0}{100}, \quad k = 1, \ldots, N
+$$
+
+$$
+w_{N+1}^B = 1 - \sum_{k=1}^{N} w_k^B
+$$
+
+where $w_k^A$ are the original hillslope bin fractions and $V_0$ is
+the gridcell natural-vegetation fraction (%). The N+1-th topounit
+absorbs all remaining area (crop, urban, lake, wetland, glacier).
+
+**Land cover on each topounit:**
+
+| Topounit | `PCT_NATVEG` | `PCT_CROP`, urban, lake, etc. |
+|:---------|:-------------|:------------------------------|
+| 1 … N   | 100 %        | 0 %                           |
+| N+1      | 0 %          | full gridcell values rescaled by $1/w_{N+1}^B$ |
+
+**Gridcell conservation check:**
+
+$$
+\sum_{k=1}^{N+1} w_k^B \cdot \frac{\text{PCT\_NATVEG}_k}{100}
+= V_0 / 100, \qquad
+w_{N+1}^B \cdot \frac{C}{100} = \frac{C_0}{100}, \quad \ldots
+$$
+
+```
+Gridcell (g)
+ ├── Topounit t=1   (hillslope bin 1 — stream/outlet)
+ │    ├── Landunit: istsoil   (active, hillslope column 1, PCT_NATVEG=100%)
+ │    ├── Landunit: istcrop   (weight=0, inactive)
+ │    └── ... all others weight=0, inactive
+ ├── Topounit t=2   (hillslope bin 2)
+ │    ├── Landunit: istsoil   (active, hillslope column 2, PCT_NATVEG=100%)
+ │    └── ... all others weight=0, inactive
+ ├── ...
+ ├── Topounit t=N   (hillslope bin N — divide)
+ │    ├── Landunit: istsoil   (active, hillslope column N, PCT_NATVEG=100%)
+ │    └── ... all others weight=0, inactive
+ └── Topounit t=N+1  (non-natural container)
+      ├── Landunit: istsoil   (weight=0, inactive — PCT_NATVEG=0%)
+      ├── Landunit: istcrop   (active, full gridcell crop weight)
+      ├── Landunit: isturb_*  (active, full gridcell urban weight)
+      ├── Landunit: istdlak   (active, full gridcell lake weight)
+      ├── Landunit: istwet    (active, full gridcell wetland weight)
+      └── Landunit: istice    (active, full gridcell ice weight)
+```
+
+**Differences from Option A (Proposed Structure):**
+
+| Aspect | Option A (N topounits) | Option B (N+1 topounits) |
+|:-------|:-----------------------|:-------------------------|
+| Non-natural land | Carried by topounit N alongside hillslope column N | Isolated in a dedicated topounit N+1 |
+| Topounit N `istsoil` | Active; double-duty (hillslope + non-natural) | Active; pure hillslope only |
+| Topounit N+1 `istsoil` | Does not exist | Inactive (`wttopounit=0`) |
+| H3D filter | Collects N istsoil columns | Collects N istsoil columns (topounit N+1 excluded by zero weight) |
+| `topoPerGrid` in surfdata | N | N+1 |
+| `nmaxhillcol` in surfdata | N | N (unchanged) |
+
+The key benefit of Option B is that the hillslope topounits 1…N are
+purely natural-vegetation units, making the `istsoil` weight and
+activity unambiguous. The H3D solver treats them identically to
+Option A since the filter still collects exactly N contiguous
+`istsoil` columns in column-index order.
