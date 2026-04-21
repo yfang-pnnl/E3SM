@@ -496,21 +496,22 @@ A sign check on $r_{\text{sub}}$ determines direction:
 
 **Step 3 — final `qflx_drain`:**
 
-After the soil-moisture redistribution loop and saturation-excess accounting:
+After the soil-moisture redistribution loop and saturation-excess accounting,
+`qflx_rsub_sat` is augmented with the h3d saturation-excess contribution:
 
-$$
-Q_{\text{drain}}(c) = Q_{\text{rsub\_sat}}(c) + r_{\text{sub}}(c)
-$$
+```
+qflx_rsub_sat(c) += qflx_rsub_sat_h3d(c)
+```
 
-where $Q_{\text{rsub\_sat}}$ (`qflx_rsub_sat`) accumulates both the
-standard saturation-excess (from bucket overflow at the top layer) and
-the h3d contribution:
+and the final column drainage is:
 
-$$
-Q_{\text{rsub\_sat}}(c) \mathrel{+}= Q_{\text{rsub\_sat,h3d}}(c)
-$$
+```
+qflx_drain(c) = qflx_rsub_sat(c) + rsub_xrun(c)
+```
 
-(`qflx_rsub_sat` += `qflx_rsub_sat_h3d`)
+where `qflx_rsub_sat` accumulates both the standard saturation-excess
+(bucket overflow at the top layer) and the h3d contribution, and
+`rsub_xrun` is the impedance-scaled lateral flux $r_{\text{sub}}$.
 
 For urban columns `qflx_drain` is subsequently zeroed (except pervious
 road). The final `qflx_drain` is passed to the river-routing component.
