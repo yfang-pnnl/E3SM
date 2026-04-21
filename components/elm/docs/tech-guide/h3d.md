@@ -391,7 +391,7 @@ $$
 Q_{sub} = -\frac{\Delta S_{sat}}{\Delta t}
 $$
 
-Outputs updated water-table depth and drainage rates (qflx_drain_h3d).
+Outputs updated water-table depth and drainage rates (`qflx_drain_h3d`).
 
 ### LateralResponse
 
@@ -407,7 +407,7 @@ Steps:
 
 - Applies slope-dependent flux terms and boundary conditions.
 
-- Solves using the equation (Tridiagonal_h3D).
+- Solves using the Thomas algorithm (`Tridiagonal_h3D`).
 
 - Iterates until the solution converges.
 
@@ -415,15 +415,15 @@ Steps:
 
 After the h3D solve, the model provides:
 
-- qflx_drain_h3d — subsurface (baseflow) drainage [mm s⁻¹]
+- `qflx_drain_h3d` — subsurface (baseflow) drainage [mm s⁻¹]
 
-- qflx_rsub_sat_h3d — saturation-excess runoff [mm s⁻¹]
+- `qflx_rsub_sat_h3d` — saturation-excess runoff [mm s⁻¹]
 
-- zwt_h3d — updated water-table depth [m]
+- `zwt_h3d` — updated water-table depth [m]
 
-- f_drain — variable specific yield [–]
+- `f_drain` — variable specific yield [–]
 
-- ΔS_sat — change in saturated storage [m]
+- $\Delta S_{\text{sat}}$ — change in saturated storage [m]
 
 These outputs replace or augment SIMTOP drainage for h3D-active columns and are fed into the land surface river-routing components of ELM.
 
@@ -441,13 +441,10 @@ $$
 
 $$
 Q_{\text{sub},i} = -\frac{\Delta S_{\text{sat},i}}{\Delta t_{\text{ELM}}}
-\quad [\text{m s}^{-1}]
+\quad [\mathrm{m\,s^{-1}}]
 $$
 
-$$
-\texttt{qflx\_drain}(c) = \texttt{qflx\_drain\_h3d}(c)
-= Q_{\text{sub},i} \times 1000 \quad [\text{mm s}^{-1}]
-$$
+Then: `qflx_drain(c)` = `qflx_drain_h3d(c)` $= Q_{\text{sub},i} \times 1000$ [mm s⁻¹]
 
 **Note on the specific yield used here.** The value of $f_{\text{drain}}$
 stored on each column at this point is the final Picard iterate value from
@@ -476,8 +473,10 @@ flux used by the rest of ELM:
 **Step 1 — set lateral drainage rate:**
 
 $$
-r_{\text{sub}}(c) = f_{\text{imped}}(c) \cdot \texttt{qflx\_drain\_h3d}(c)
+r_{\text{sub}}(c) = f_{\text{imped}}(c) \cdot Q_{\text{sub}}(c) \times 1000
 $$
+
+where $Q_{\text{sub}}(c)$ is `qflx_drain_h3d(c)` in mm s⁻¹.
 
 where $f_{\text{imped}}$ is a frozen-soil impedance factor (1 when unfrozen).
 The negative of this flux [mm s⁻¹] drives water redistribution between
@@ -493,26 +492,25 @@ A sign check on $r_{\text{sub}}$ determines direction:
   $w_a$, adjusting $z_{wt}$ accordingly.
 - *Positive* (water table rising, recharge): water is added upward from
   the water-table layer. Any surplus that cannot be accommodated by soil
-  capacity becomes saturation-excess runoff
-  $\texttt{qflx\_rsub\_sat\_h3d}(c)$.
+  capacity becomes saturation-excess runoff `qflx_rsub_sat_h3d(c)`.
 
 **Step 3 — final `qflx_drain`:**
 
 After the soil-moisture redistribution loop and saturation-excess accounting:
 
 $$
-\texttt{qflx\_drain}(c)
-= \texttt{qflx\_rsub\_sat}(c) + r_{\text{sub}}(c)
+Q_{\text{drain}}(c) = Q_{\text{rsub\_sat}}(c) + r_{\text{sub}}(c)
 $$
 
-where `qflx_rsub_sat` accumulates both the standard saturation-excess
-(from bucket overflow at the top layer) and the h3d contribution
-`qflx_rsub_sat_h3d`:
+where $Q_{\text{rsub\_sat}}$ (`qflx_rsub_sat`) accumulates both the
+standard saturation-excess (from bucket overflow at the top layer) and
+the h3d contribution:
 
 $$
-\texttt{qflx\_rsub\_sat}(c)
-\mathrel{+}= \texttt{qflx\_rsub\_sat\_h3d}(c)
+Q_{\text{rsub\_sat}}(c) \mathrel{+}= Q_{\text{rsub\_sat,h3d}}(c)
 $$
+
+(`qflx_rsub_sat` += `qflx_rsub_sat_h3d`)
 
 For urban columns `qflx_drain` is subsequently zeroed (except pervious
 road). The final `qflx_drain` is passed to the river-routing component.
