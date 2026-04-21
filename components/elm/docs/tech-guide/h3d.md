@@ -427,6 +427,96 @@ After the h3D solve, the model provides:
 
 These outputs replace or augment SIMTOP drainage for h3D-active columns and are fed into the land surface river-routing components of ELM.
 
+## Column Drainage Calculation
+
+### H3D_DRI — per-column drainage from saturated storage change
+
+After `LateralResponse` converges on the new saturated thickness $h^t$ for
+all hillslope nodes, `H3D_DRI` computes the column-level drainage at the
+**ELM timestep** scale (not the sub-stepped h3d timestep):
+
+$$
+\Delta S_{\text{sat},i} = f_{\text{drain},i}\,(h_i^t - h_i^{t-1})
+$$
+
+$$
+Q_{\text{sub},i} = -\frac{\Delta S_{\text{sat},i}}{\Delta t_{\text{ELM}}}
+\quad [\text{m s}^{-1}]
+$$
+
+$$
+\texttt{qflx\_drain}(c) = \texttt{qflx\_drain\_h3d}(c)
+= Q_{\text{sub},i} \times 1000 \quad [\text{mm s}^{-1}]
+$$
+
+**Note on the specific yield used here.** The value of $f_{\text{drain}}$
+stored on each column at this point is the final Picard iterate value from
+the last call to `LateralResponse` — a Brooks–Corey estimate evaluated at
+the water-table layer immediately above the bed:
+
+$$
+f_{\text{drain}}(c) = \theta_{\text{sat}}
+\left[1 - \left(1 + \frac{z_{wt}}{\psi_{\text{sat}}}\right)^{-1/b}\right],
+\quad f_{\text{drain}} \ge 0.02
+$$
+
+This is the same $f_{\text{drain}}$ used as the diagonal coefficient $b_i$
+in the implicit tridiagonal solve. It is **not** a fixed constant; it
+changes each ELM timestep through the Picard iterations. However, if the
+water table is exactly at the bedrock (`h_sat = 0`) the solver short-circuits
+and sets $f_{\text{drain}} = 0.2$ (a nominal fallback), which is the
+constant-yield appearance noted in the code.
+
+### DrainageH3D — translating `qflx_drain_h3d` to `qflx_drain`
+
+After `H3D_DRI` returns, `DrainageH3D` applies `qflx_drain_h3d` to update
+soil moisture and the water table, then assembles the final column drainage
+flux used by the rest of ELM:
+
+**Step 1 — set lateral drainage rate:**
+
+$$
+r_{\text{sub}}(c) = f_{\text{imped}}(c) \cdot \texttt{qflx\_drain\_h3d}(c)
+$$
+
+where $f_{\text{imped}}$ is a frozen-soil impedance factor (1 when unfrozen).
+The negative of this flux [mm s⁻¹] drives water redistribution between
+soil layers and the unconfined aquifer store $w_a$.
+
+**Step 2 — update soil moisture and water table:**
+
+A sign check on $r_{\text{sub}}$ determines direction:
+
+- *Negative* (water table deepening, drainage outflow): water is removed
+  layer by layer starting at the water-table layer, lowering $z_{wt}$.
+  Any shortfall beyond what soil layers can supply is drawn from the aquifer
+  $w_a$, adjusting $z_{wt}$ accordingly.
+- *Positive* (water table rising, recharge): water is added upward from
+  the water-table layer. Any surplus that cannot be accommodated by soil
+  capacity becomes saturation-excess runoff
+  $\texttt{qflx\_rsub\_sat\_h3d}(c)$.
+
+**Step 3 — final `qflx_drain`:**
+
+After the soil-moisture redistribution loop and saturation-excess accounting:
+
+$$
+\texttt{qflx\_drain}(c)
+= \texttt{qflx\_rsub\_sat}(c) + r_{\text{sub}}(c)
+$$
+
+where `qflx_rsub_sat` accumulates both the standard saturation-excess
+(from bucket overflow at the top layer) and the h3d contribution
+`qflx_rsub_sat_h3d`:
+
+$$
+\texttt{qflx\_rsub\_sat}(c)
+\mathrel{+}= \texttt{qflx\_rsub\_sat\_h3d}(c)
+$$
+
+For urban columns `qflx_drain` is subsequently zeroed (except pervious
+road). The final `qflx_drain` is passed to the river-routing component.
+
 ## Subgrid Hierarchy
 
 ### Original Structure
