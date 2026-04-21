@@ -1265,8 +1265,8 @@ contains
        ! =====================================================================
        call t_startf('h3d_out')
 
-       call prepare_h3d_var(bounds_clump, filter(nc)%num_h3dc, filter(nc)%h3dc,&
-            waterflux_vars, waterstate_vars, energyflux_vars, h3d_vars)
+       call prepare_h3d_var(bounds_clump, filter(nc)%num_h3dc, filter(nc)%h3dc, &
+            h3d_vars)
 
        call t_stopf('h3d_out')
 
@@ -2005,7 +2005,7 @@ contains
   end subroutine write_diagnostic
 
   !------------------------------------------------------------------------
-  subroutine prepare_h3d_var(bounds_clump,num_h3dc,filter_h3dc,waterflux_vars,waterstate_vars,energyflux_vars,h3d_vars)
+  subroutine prepare_h3d_var(bounds_clump,num_h3dc,filter_h3dc,h3d_vars)
     !
     ! !DESCRIPTION:
     ! arrange ELM column values to h3d column
@@ -2013,9 +2013,8 @@ contains
     ! !USES:
     use abortutils         , only : endrun
     use shr_log_mod        , only : errMsg => shr_log_errMsg
-    use WaterStateType     , only : waterstate_type
-    use WaterFluxType      , only : waterflux_type
-    use EnergyFluxType     , only : energyflux_type
+    use VegetationDataType , only : veg_ef
+    use subgridAveMod      , only : p2c
     use h3DType            , only : h3d_type
     use elm_varpar         , only : nlevgrnd, nh3dc_per_lunit
     !
@@ -2023,23 +2022,27 @@ contains
     type(bounds_type)      , intent(in)    :: bounds_clump        
     integer                , intent(in)    :: num_h3dc       ! number of column h3d points in column filter
     integer                , intent(in)    :: filter_h3dc(:) ! columnfilter for h3d points
-    type(waterstate_type)  , intent(in)    :: waterstate_vars
-    type(waterflux_type)   , intent(in)    :: waterflux_vars
-    type(energyflux_type)  , intent(in)    :: energyflux_vars
     type(h3d_type       )  , intent(inout) :: h3d_vars
     
     integer                                :: c0,c,l,k,kl,lk,fc,j
+    real(r8) :: eflx_lh_tot_col(bounds_clump%begc:bounds_clump%endc)
+    real(r8) :: eflx_sh_tot_col(bounds_clump%begc:bounds_clump%endc)
+
+    call p2c(bounds_clump, num_h3dc, filter_h3dc, &
+         veg_ef%eflx_lh_tot(bounds_clump%begp:bounds_clump%endp), &
+         eflx_lh_tot_col(bounds_clump%begc:bounds_clump%endc))
+    call p2c(bounds_clump, num_h3dc, filter_h3dc, &
+         veg_ef%eflx_sh_tot(bounds_clump%begp:bounds_clump%endp), &
+         eflx_sh_tot_col(bounds_clump%begc:bounds_clump%endc))
 
     associate(                                             &
-             qflx_evap_tot_col     =>   waterflux_vars%qflx_evap_tot_col ,&! Input(:)
-             qflx_tran_veg_col     =>   waterflux_vars%qflx_tran_veg_col ,&! Input(:)
-             qflx_rsub_sat_col     =>   waterflux_vars%qflx_rsub_sat_col ,&! Input:  [real(r8) (:)  ]  soil saturation excess [mm h2o/s]
-             qflx_drain_col        =>   waterflux_vars%qflx_drain_col    ,&! Input:  [real(r8) (:)  ]  sub-surface runoff (mm H2O /s)
-             qflx_surf_col         =>   waterflux_vars%qflx_surf_col     ,&! Input:  [real(r8) (:)  ]  surface runoff (mm H2O /s)
-             h2osfc_col            =>   waterstate_vars%h2osfc_col       ,&! Input:  [real(r8) (:)  ]  surface water (mm)
-             h2osoi_liq_col        =>   waterstate_vars%h2osoi_liq_col   ,&! Input:  [real(r8) (:,:)]  liquid water (kg/m2)
-             eflx_lh_tot_col       =>   energyflux_vars%eflx_lh_tot_col  ,&! Input:  [real(r8) (:)  ]  total latent heat flux (W/m**2) [+ to atm]
-             eflx_sh_tot_col       =>   energyflux_vars%eflx_sh_tot_col  ,&! Input:  [real(r8) (:)  ]  total sensible heat flux (W/m**2) [+ to atm]
+             qflx_evap_tot_col     =>   col_wf%qflx_evap_tot             ,&! Input(:)
+             qflx_tran_veg_col     =>   col_wf%qflx_tran_veg             ,&! Input(:)
+             qflx_rsub_sat_col     =>   col_wf%qflx_rsub_sat             ,&! Input:  [real(r8) (:)  ]  soil saturation excess [mm h2o/s]
+             qflx_drain_col        =>   col_wf%qflx_drain                ,&! Input:  [real(r8) (:)  ]  sub-surface runoff (mm H2O /s)
+             qflx_surf_col         =>   col_wf%qflx_surf                 ,&! Input:  [real(r8) (:)  ]  surface runoff (mm H2O /s)
+             h2osfc_col            =>   col_ws%h2osfc                    ,&! Input:  [real(r8) (:)  ]  surface water (mm)
+             h2osoi_liq_col        =>   col_ws%h2osoi_liq                ,&! Input:  [real(r8) (:,:)]  liquid water (kg/m2)
              qcharge_col           =>   soilhydrology_vars%qcharge_col   ,&! Input:  [real(r8) (:)  ]  aquifer recharge rate (mm h2o/s)        
 
              qflx_evap_tot_lun     =>   h3d_vars%qflx_evap_tot_lun  ,&! output (:,:)
@@ -2053,7 +2056,6 @@ contains
              eflx_sh_tot_lun       =>   h3d_vars%eflx_sh_tot_lun    ,&! Output: [real(r8) (:,:  ]  total sensible heat flux (W/m**2) [+ to atm]
              qflx_charge_lun       =>   h3d_vars%qflx_charge_lun    &! output: [real(r8) (:,:) ]  aquifer recharge rate (mm h2o/s)       
              )
-             
     do fc=1,num_h3dc,nh3dc_per_lunit
 
        c0 = filter_h3dc(fc)
@@ -2067,10 +2069,8 @@ contains
        ! output.  In the legacy single-topounit case all kl give the same
        ! landunit, so the loop is a no-op beyond the first iteration.
        do k=1,nh3dc_per_lunit
-          c = c0+k-1
-          do kl=1,nh3dc_per_lunit
-             lk = col_pp%landunit(c0+kl-1)
-             !water flux
+             c = c0+k-1
+             lk = l             
              qflx_evap_tot_lun(lk,k) = qflx_evap_tot_col(c)
              qflx_tran_veg_lun(lk,k) = qflx_tran_veg_col(c)
              qflx_rsub_sat_lun(lk,k) = qflx_rsub_sat_col(c) 
@@ -2088,7 +2088,6 @@ contains
              !energy state
              eflx_lh_tot_lun(lk,k)   = eflx_lh_tot_col(c)
              eflx_sh_tot_lun(lk,k)   = eflx_sh_tot_col(c)
-          end do
        end do
 
      end do
