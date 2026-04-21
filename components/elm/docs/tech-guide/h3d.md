@@ -592,9 +592,9 @@ absorbs all remaining area (crop, urban, lake, wetland, glacier).
 **Gridcell conservation check:**
 
 $$
-\sum_{k=1}^{N+1} w_k^B \cdot \frac{\text{PCT\_NATVEG}_k}{100}
-= V_0 / 100, \qquad
-w_{N+1}^B \cdot \frac{C}{100} = \frac{C_0}{100}, \quad \ldots
+\sum_{k=1}^{N+1} w_k^B \cdot \frac{\text{PCT\_NATVEG}_{k}}{100}
+= \frac{V_0}{100}, \qquad
+w_{N+1}^B \cdot \frac{C}{100} = \frac{C_{0}}{100}, \quad \ldots
 $$
 
 ```
