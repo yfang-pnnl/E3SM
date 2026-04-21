@@ -28,6 +28,7 @@ module initVerticalMod
   use fileutils      , only : getfil
   use LandunitType   , only : lun_pp
   use ColumnType     , only : col_pp
+  use TopounitType   , only : top_pp
   use ColumnDataType , only : col_ws
   use SnowHydrologyMod, only : InitSnowLayers
   use ncdio_pio       , only : file_desc_t, ncd_io, ncd_pio_openfile, ncd_pio_closefile , ncd_inqdlen
@@ -679,7 +680,15 @@ contains
           l = col_pp%landunit(c)
           g = col_pp%gridcell(c)
           if (lun_pp%itype(l) == istsoil .and. col_pp%h3d_active(c)) then
-            k = c - lun_pp%coli(l) + 1
+            ! When use_h3d with multiple topounits, each topounit holds
+            ! one hillslope column; use the topounit index as the
+            ! hillslope position.  Otherwise fall back to column-within-
+            ! landunit index (single-topounit H3D).
+            if (use_h3d .and. ldomain%num_tunits_per_grd(g) > 1) then
+               k = top_pp%topo_grc_ind(col_pp%topounit(c))
+            else
+               k = c - lun_pp%coli(l) + 1
+            end if
             if (readvar) then
               ! hillslope_slope is per-column (m/m) -> degrees
               col_pp%h3d_slope(c) = atan(max(hs_slp(g,k), 0.002_r8)) * 180._r8 / rpi

@@ -256,7 +256,7 @@ contains
     !
     ! !USES
     use elm_varsur , only : wt_tunit, elv_tunit, slp_tunit, asp_tunit, num_tunit_per_grd 
-    use elm_varctl , only : use_IM2_hillslope_hydrology
+    use elm_varctl , only : use_IM2_hillslope_hydrology, use_h3d
     use topounit_varcon   , only : max_topounits, has_topounit 
     ! !ARGUMENTS
     integer, intent(in) :: gdc
@@ -302,7 +302,7 @@ contains
 
     ! Loop through topounits again to find its nearest downhill topounit on this gridcell
     ! part of the IM2 hillslope hydrology implementation
-    if (ntopos > 1 .and. use_IM2_hillslope_hydrology) then
+    if (ntopos > 1 .and. (use_IM2_hillslope_hydrology .or. use_h3d)) then
       ! find the minimum elevation over all topounits on the gridcell
       min_elev = top_pp%elevation(begt)
       min_index = begt

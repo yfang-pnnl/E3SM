@@ -2028,7 +2028,7 @@ contains
     type(energyflux_type)  , intent(in)    :: energyflux_vars
     type(h3d_type       )  , intent(inout) :: h3d_vars
     
-    integer                                :: c0,c,l,k,fc,j
+    integer                                :: c0,c,l,k,kl,lk,fc,j
 
     associate(                                             &
              qflx_evap_tot_col     =>   waterflux_vars%qflx_evap_tot_col ,&! Input(:)
@@ -2061,26 +2061,34 @@ contains
 
        if (lun_pp%hs_area(l) == 0._r8) cycle
 
+       ! In multi-topounit H3D each column c0+k-1 belongs to a different
+       ! landunit.  Write each position k's value to ALL N landunits so
+       ! that the l2g weighted average produces the correct per-position
+       ! output.  In the legacy single-topounit case all kl give the same
+       ! landunit, so the loop is a no-op beyond the first iteration.
        do k=1,nh3dc_per_lunit
           c = c0+k-1
-          !water flux
-          qflx_evap_tot_lun(l,k) = qflx_evap_tot_col(c)
-          qflx_tran_veg_lun(l,k) = qflx_tran_veg_col(c)
-          qflx_rsub_sat_lun(l,k) = qflx_rsub_sat_col(c) 
-          qflx_drain_lun  (l,k)  = qflx_drain_col(c)
-          qflx_surf_lun    (l,k) = qflx_surf_col(c)
-          qflx_charge_lun (l,k)  = qcharge_col(c)
+          do kl=1,nh3dc_per_lunit
+             lk = col_pp%landunit(c0+kl-1)
+             !water flux
+             qflx_evap_tot_lun(lk,k) = qflx_evap_tot_col(c)
+             qflx_tran_veg_lun(lk,k) = qflx_tran_veg_col(c)
+             qflx_rsub_sat_lun(lk,k) = qflx_rsub_sat_col(c) 
+             qflx_drain_lun   (lk,k) = qflx_drain_col(c)
+             qflx_surf_lun    (lk,k) = qflx_surf_col(c)
+             qflx_charge_lun  (lk,k) = qcharge_col(c)
 
-          !water state
-          h2osfc_lun(l,k)        = h2osfc_col(c)
-          h2osoi_liq_lun(l,k)    = 0._r8
-          do j = 1, nlevgrnd 
-             h2osoi_liq_lun(l,k) = h2osoi_liq_lun(l,k) + h2osoi_liq_col(c,j)
+             !water state
+             h2osfc_lun(lk,k)        = h2osfc_col(c)
+             h2osoi_liq_lun(lk,k)    = 0._r8
+             do j = 1, nlevgrnd 
+                h2osoi_liq_lun(lk,k) = h2osoi_liq_lun(lk,k) + h2osoi_liq_col(c,j)
+             end do
+
+             !energy state
+             eflx_lh_tot_lun(lk,k)   = eflx_lh_tot_col(c)
+             eflx_sh_tot_lun(lk,k)   = eflx_sh_tot_col(c)
           end do
-
-          !energy state
-          eflx_lh_tot_lun(l,k)   = eflx_lh_tot_col(c)
-          eflx_sh_tot_lun(l,k)   = eflx_sh_tot_col(c)
        end do
 
      end do

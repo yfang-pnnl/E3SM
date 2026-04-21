@@ -377,7 +377,8 @@ contains
        ! initialization of the new crop landunit will be initialized in an un-ideal way
        ! in this rare situation.
        !if (lun_pp%itype(l) == istsoil .and. .not. is_topo_all_ltypeX(t, istice)) then ! make sure no active l for inactive topounit TKT
-       if (top_pp%active(t) .and. lun_pp%itype(l) == istsoil .and. .not. is_topo_all_ltypeX(t, istice)) then
+       if (top_pp%active(t) .and. lun_pp%itype(l) == istsoil .and. .not. is_topo_all_ltypeX(t, istice) &
+            .and. lun_pp%wttopounit(l) > 0._r8) then
           is_active_l = .true.
        end if
 
@@ -632,7 +633,7 @@ contains
     do c = bounds%begc,bounds%endc
        tu = col_pp%topounit(c)
        topo_active_only = top_pp%active(tu) 
-       if (topo_active_only) then ! Check only for the valid topounits
+       if (topo_active_only .and. col_pp%active(c)) then ! Check only active cols in valid topounits
           if (.not. weights_okay(sumwtcol(c), active_only, col_pp%active(c))) then
              write(iulog,*) trim(subname),' ERROR: at c = ',c,'total PFT weight is ',sumwtcol(c), &
                          'active_only = ', active_only
@@ -644,7 +645,7 @@ contains
     do l = bounds%begl,bounds%endl
        tu = lun_pp%topounit(l)
        topo_active_only = top_pp%active(tu) 
-       if (topo_active_only) then 
+       if (topo_active_only .and. lun_pp%active(l)) then ! Check only active landunits in valid topounits
           if (.not. weights_okay(sumwtlunit(l), active_only, lun_pp%active(l))) then
              write(iulog,*) trim(subname),' ERROR: at l = ',l,'total PFT weight is ',sumwtlunit(l), &
                          'active_only = ', active_only
@@ -810,15 +811,11 @@ contains
 
     weights_equal_1 = (abs(sumwts - 1._r8) <= tolerance)
 
-    if (active_weights_only) then
-       if (i_am_active) then        ! condition (2) above
-          weights_okay = weights_equal_1
-       else                         ! condition (3) above
-          weights_okay = (sumwts == 0._r8 .or. weights_equal_1)
-       end if
-    else                            ! condition (1) above
-       ! (note that i_am_active is irrelevant in this case)
+    if (i_am_active) then
        weights_okay = weights_equal_1
+    else
+       ! Inactive points are allowed to have weight 0 or 1 regardless of active_only
+       weights_okay = (sumwts == 0._r8 .or. weights_equal_1)
     end if
 
   end function weights_okay

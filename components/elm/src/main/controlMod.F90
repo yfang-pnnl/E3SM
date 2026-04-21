@@ -359,6 +359,10 @@ contains
    ! NGEE Arctic options
    namelist /elm_inparm/ &
          use_polygonal_tundra, use_arctic_init
+
+    ! h3d option
+    namelist /elm_inparm/ use_h3d
+    
     ! ----------------------------------------------------------------------
     ! Default values
     ! ----------------------------------------------------------------------

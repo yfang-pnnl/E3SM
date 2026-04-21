@@ -58,7 +58,7 @@ contains
     do nl = lbound(arr, 1), ubound(arr, 1)
        tm = max_topounits          
        do t = 1, tm
-          if (arr(nl,t,1) >=0._r8) then        ! Check sum only if topounit is valid
+          if (arr(nl,t,1) >=0._r8 .and. sum(arr(nl,t,:)) > eps) then  ! skip invalid or no-natveg topounits
              if (abs(sum(arr(nl,t,:)) - 1._r8) > eps) then
                 found = .true.
                 nindx = nl
