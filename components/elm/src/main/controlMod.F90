@@ -99,7 +99,8 @@ module controlMod
                         use_vichydro, use_century_decomp, use_cn, use_crop, &
                         use_snicar_frc, use_snicar_ad, use_firn_percolation_and_compaction, &
                         use_extrasnowlayers, use_T_rho_dependent_snowthk, &
-                        use_vancouver, use_mexicocity, use_noio, use_finetop_rad
+                        use_vancouver, use_mexicocity, use_noio, use_finetop_rad, &
+                        use_hloba_da, hloba_da_config, hloba_da_freq, hloba_da_ndays
   !
   ! !PUBLIC TYPES:
   implicit none
@@ -402,6 +403,9 @@ contains
    ! NGEE Arctic options
    namelist /elm_inparm/ &
          use_polygonal_tundra, use_arctic_init
+   ! hloba latent-space data assimilation
+   namelist /elm_inparm/ &
+         use_hloba_da, hloba_da_config, hloba_da_freq, hloba_da_ndays
     ! ----------------------------------------------------------------------
     ! Default values
     ! ----------------------------------------------------------------------
@@ -810,6 +814,11 @@ contains
     call mpi_bcast (fan_mode, len(fan_mode), MPI_CHARACTER, 0, mpicom, ier)
     call mpi_bcast (fan_to_bgc_veg, 1, MPI_LOGICAL, 0, mpicom, ier)
     call mpi_bcast (nh4_ads_coef, 1, MPI_REAL8, 0, mpicom, ier)
+    ! hloba DA
+    call mpi_bcast (use_hloba_da, 1, MPI_LOGICAL, 0, mpicom, ier)
+    call mpi_bcast (hloba_da_config, len(hloba_da_config), MPI_CHARACTER, 0, mpicom, ier)
+    call mpi_bcast (hloba_da_freq, len(hloba_da_freq), MPI_CHARACTER, 0, mpicom, ier)
+    call mpi_bcast (hloba_da_ndays, 1, MPI_INTEGER, 0, mpicom, ier)
 
     ! initial file variables
     call mpi_bcast (nrevsn, len(nrevsn), MPI_CHARACTER, 0, mpicom, ier)
@@ -1396,6 +1405,14 @@ contains
     if (use_polygonal_tundra) write(iulog, *) '    use_polygonal_tundra    =', use_polygonal_tundra
     write(iulog, *) '    use_polygonal_tundra    =', use_polygonal_tundra
     if (use_arctic_init) write(iulog, *)      '    use_arctic_init    ='     , use_arctic_init
+    ! hloba DA
+    write(iulog,*) '    use_hloba_da            = ', use_hloba_da
+    if (use_hloba_da) then
+       write(iulog,*) '    hloba_da_config         = ', trim(hloba_da_config)
+       write(iulog,*) '    hloba_da_freq           = ', trim(hloba_da_freq)
+       if (trim(hloba_da_freq) == 'ndays') &
+          write(iulog,*) '    hloba_da_ndays          = ', hloba_da_ndays
+    end if
 
   end subroutine control_print
 

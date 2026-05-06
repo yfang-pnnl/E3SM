@@ -417,6 +417,18 @@ module elm_varctl
   !----------------------------------------------------------
   logical, public :: use_polygonal_tundra = .false.
   logical, public :: use_arctic_init     = .false.
+  !----------------------------------------------------------
+  ! hloba latent-space data assimilation
+  !----------------------------------------------------------
+  logical, public :: use_hloba_da         = .false.
+  character(len=fname_len), public :: hloba_da_config = ' '
+  ! DA trigger frequency:
+  !   'monthly' - first timestep of each calendar month (default)
+  !   'daily'   - first timestep of each calendar day
+  !   'ndays'   - every hloba_da_ndays days, aligned to simulation start
+  character(len=16), public :: hloba_da_freq  = 'monthly'
+  integer,           public :: hloba_da_ndays = 30
+
 
   !----------------------------------------------------------
   ! VSFM switches

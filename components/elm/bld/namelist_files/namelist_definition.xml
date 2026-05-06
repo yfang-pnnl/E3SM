@@ -2258,7 +2258,37 @@ default: 0
 Cold-start initialization conditions in tundra start saturated and frozen.
 <default>Default: .false.</default>
 </entry>
+<!-- ========================================================================================  -->
+<!-- hloba latent-space data assimilation                                                      -->
+<!-- ========================================================================================  -->
 
+<entry id="use_hloba_da" type="logical" category="default_settings"
+	group="elm_inparm" value=".false.">
+Enable in-memory latent-space data assimilation using the trained hloba_land model.
+When enabled, DA is applied at the start of each month via MPI gather/scatter.
+<default>Default: .false.</default>
+</entry>
+
+<entry id="hloba_da_config" type="char*256" category="default_settings"
+	group="elm_inparm" value="">
+Path to the hloba DA JSON configuration file.  If blank while use_hloba_da is true,
+falls back to ELM_DA_CONFIG environment variable.
+<default>Default: blank</default>
+</entry>
+
+<entry id="hloba_da_freq" type="char*256" category="default_settings"
+	group="elm_inparm" value="">
+Path to the hloba DA JSON configuration file.  If blank while use_hloba_da is true,
+falls back to ELM_DA_CONFIG environment variable.
+<default>Default: blank</default>
+</entry>
+
+<entry id="hlo_da_ndays" type="integer(6)" category="default_settings"
+       group="elm_inparm" value="30">
+Path to the hloba DA JSON configuration file.  If blank while use_hloba_da is true,
+falls back to ELM_DA_CONFIG environment variable.
+<default>Default: 0</default>
+</entry>
 <!-- ========================================================================================  -->
 <!-- Namelist options for soil erosion model                                                   -->
 <!-- ========================================================================================  -->
