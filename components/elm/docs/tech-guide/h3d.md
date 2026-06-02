@@ -472,27 +472,25 @@ flux used by the rest of ELM:
 
 **Step 1 — set lateral drainage rate:**
 
-$$
-r_{\text{sub}}(c) = f_{\text{imped}}(c) \cdot Q_{\text{sub}}(c) \times 1000
-$$
+```
+rsub_top(c) = h3d_imped(c) * qflx_drain_h3d(c)
+```
 
-where $Q_{\text{sub}}(c)$ is `qflx_drain_h3d(c)` in mm s⁻¹.
-
-where $f_{\text{imped}}$ is a frozen-soil impedance factor (1 when unfrozen).
-The negative of this flux [mm s⁻¹] drives water redistribution between
-soil layers and the unconfined aquifer store $w_a$.
+where `h3d_imped` is a frozen-soil impedance factor (1 when unfrozen).
+The sign of `rsub_top` determines the direction of water movement in
+Step 2.
 
 **Step 2 — update soil moisture and water table:**
 
-A sign check on $r_{\text{sub}}$ determines direction:
+A sign check on `rsub_top` determines direction:
 
-- *Negative* (water table deepening, drainage outflow): water is removed
+- *Positive* (water table deepening, drainage outflow): water is removed
   layer by layer starting at the water-table layer, lowering $z_{wt}$.
-  Any shortfall beyond what soil layers can supply is drawn from the aquifer
-  $w_a$, adjusting $z_{wt}$ accordingly.
-- *Positive* (water table rising, recharge): water is added upward from
-  the water-table layer. Any surplus that cannot be accommodated by soil
+  Any shortfall is drawn from the aquifer store $w_a$.
+- *Negative* (water table rising): water is added upward from the
+  water-table layer. Any surplus that cannot be accommodated by soil
   capacity becomes saturation-excess runoff `qflx_rsub_sat_h3d(c)`.
+  `rsub_top(c)` is reduced by the residual amount.
 
 **Step 3 — final `qflx_drain`:**
 
@@ -506,12 +504,17 @@ qflx_rsub_sat(c) += qflx_rsub_sat_h3d(c)
 and the final column drainage is:
 
 ```
-qflx_drain(c) = qflx_rsub_sat(c) + rsub_xrun(c)
+qflx_drain(c) = qflx_rsub_sat(c) + rsub_top(c)
 ```
 
-where `qflx_rsub_sat` accumulates both the standard saturation-excess
-(bucket overflow at the top layer) and the h3d contribution, and
-`rsub_xrun` is the impedance-scaled lateral flux $r_{\text{sub}}$.
+where `rsub_top(c) = h3d_imped(c) * qflx_drain_h3d(c)` is the
+impedance-scaled lateral flux, adjusted downward if the soil column
+cannot supply the full amount. `qflx_rsub_sat` and `rsub_top` are
+complementary partitions of `qflx_drain_h3d`: `qflx_rsub_sat_h3d`
+captures the rising-water-table surplus that could not be accommodated
+by the soil column, while `rsub_top` is the portion physically removed
+from (or added to) the soil layers. Together they sum to the original
+`qflx_drain_h3d` — there is no double counting.
 
 For urban columns `qflx_drain` is subsequently zeroed (except pervious
 road). The final `qflx_drain` is passed to the river-routing component.
@@ -725,3 +728,196 @@ purely natural-vegetation units, making the `istsoil` weight and
 activity unambiguous. The H3D solver treats them identically to
 Option A since the filter still collects exactly N contiguous
 `istsoil` columns in column-index order.
+
+---
+
+## Water Table Depth (`zwt`) Calculation Logic
+
+The water table depth `zwt(c)` is computed and updated across three subroutines called in sequence:
+
+1. **`soilwater_zengdecker2009`** (`SoilWaterMovementMod.F90`) — solves Richards equation, computes `qcharge`
+2. **`WaterTable`** (`SoilHydrologyMod.F90`) — updates `zwt` from aquifer recharge (`qcharge`)
+3. **`Drainage`** (`SoilHydrologyMod.F90`) — updates `zwt` from topographic/perched baseflow
+
+Throughout, `jwt(c)` is the index of the soil layer immediately *above* the water table (i.e., `zwt` lies between `zi(c,jwt)` and `zi(c,jwt+1)`). When `jwt == nlevbed`, the water table is at or below the bottom of the resolved soil column.
+
+---
+
+### Default Option (`origflag == 0`, `zengdecker_2009_with_var_soil_thick = .false.`)
+
+#### Step 1: `soilwater_zengdecker2009` — Richards Equation and `qcharge`
+
+1. **Compute `jwt`**: Loop over layers `j = 1, nlevbed`; set `jwt(c) = j-1` at the first layer where `zwt(c) <= zi(c,j)`. If no layer satisfies this, `jwt(c) = nlevbed` (water table below soil column).
+
+2. **Compute `vwc_zwt`**: Volumetric water content at the water table depth. If the layer containing the water table is frozen, estimates `vwc_zwt` from the Clausius-Clapeyron relation; otherwise `vwc_zwt = watsat(c,nlevbed)`.
+
+3. **Equilibrium water content `vol_eq`**: For each layer, computes the equilibrium volumetric water content assuming hydrostatic equilibrium above `zwt`. Uses three cases depending on whether `zwtmm` is above, within, or below the layer interfaces.
+
+4. **Equilibrium matric potential `zq`**: Derived from `vol_eq` via Clapp-Hornberger: `zq(j) = -sucsat * (vol_eq/watsat)^(-bsw)`.
+
+5. **Hydraulic conductivity `hk` and matric potential `smp`**: Uses liquid volumetric water content (`vwc_liq`) for both. Ice impedance: `imped = 10^(-e_ice * icefrac)`.
+
+6. **Aquifer (extra) layer**: Placed at `zmm(nlevbed+1) = 0.5*(zwt*1000 + zmm(nlevbed))`. Soil moisture `s_node` for the aquifer layer uses the average of `vwc_zwt` and `vwc_liq(nlevbed)`.
+
+7. **Tridiagonal solve**: Solves the linearized Richards equation for `dwat2` (change in volumetric water content per layer). The bottom boundary condition depends on whether the water table is in or below the soil column:
+   - **`jwt < nlevbed`** (water table in soil): `qout(nlevbed) = 0` (zero-flow bottom); aquifer layer is hydrologically inactive.
+   - **`jwt == nlevbed`** (water table below soil): flux between bottom soil layer and aquifer layer is active (`qout(nlevbed) = -hk * (smp_aquifer - smp_bottom - dzq) / den`).
+
+8. **Compute `qcharge`**:
+   - **`jwt < nlevbed`**: Uses unsaturated hydraulic conductivity `ka` at layer `jwt+1` and the matric-potential head difference between the soil and the water table:
+     ```
+     qcharge = -ka * (wh_zwt - wh) / ((zwt - z(jwt)) * 1000 * 2)
+     ```
+     Clamped to ±10 mm/s.
+   - **`jwt == nlevbed`**: `qcharge = dwat2(nlevsoi+1) * dzmm(nlevsoi+1) / dtime` (drainage from the tridiagonal solve of the aquifer layer).
+
+#### Step 2: `WaterTable` — Update `zwt` from `qcharge`
+
+1. **Recompute `jwt`** (same logic as Step 1).
+
+2. **Compute aquifer specific yield `rous`**:
+   ```
+   rous = watsat(nlevbed) * (1 - (1 + 1000*zwt/sucsat(nlevbed))^(-1/bsw(nlevbed)))
+   rous = max(rous, 0.02)
+   ```
+
+3. **Groundwater irrigation withdrawal**: `wa -= qflx_grnd_irrig * dt`; `zwt += qflx_grnd_irrig * dt / 1000 / rous`.
+
+4. **Apply `qcharge` to update `zwt`**:
+   - **`jwt == nlevbed`** (water table below soil column):
+     ```
+     wa  = wa  + qcharge * dt
+     zwt = zwt - qcharge * dt / 1000 / rous
+     ```
+   - **`jwt < nlevbed`** (water table within soil): Iterates layer-by-layer:
+     - *Rising water table* (`qcharge > 0`): From `jwt+1` upward to layer 1, compute layer-specific `s_y`, raise `zwt` by `qcharge_layer / s_y / 1000` until `qcharge_tot` is exhausted.
+     - *Deepening water table* (`qcharge < 0`): From `jwt+1` downward to `nlevbed`, lower `zwt` layer-by-layer. If residual remains, `zwt += residual / 1000 / rous`.
+
+5. **Recompute `jwt`** after the update.
+
+#### Step 3: `Drainage` — Topographic Baseflow and Final `zwt` Update
+
+1. **Recompute `jwt`**.
+
+2. **Frost table and perched water table**:
+   - `frost_table(c)` = depth of first frozen layer below an unfrozen layer.
+   - If `zwt < frost_table` (and `origflag == 0`): compute perched drainage `qflx_drain_perched` from layers between `jwt+1` and `k_frz`. Remove water from those layers; deepen `zwt` accordingly: `zwt += removed_water / eff_porosity / 1000`. Recompute `jwt`.
+   - If `zwt >= frost_table`: locate perched water table by interpolation from saturation profiles; compute and remove perched drainage from `zwt_perched`.
+
+3. **Topographic runoff `rsub_top`**:
+   ```
+   fff = 1 / hkdepth
+   imped = 10^(-e_ice * (icefracsum / dzsum))
+   rsub_top_max = min(10 * sin(slope), rsub_top_globalmax)
+   rsub_top = imped * rsub_top_max * exp(-fff * zwt)
+   ```
+
+4. **Remove `rsub_top` from soil and update `zwt`**:
+   - **`jwt == nlevbed`** (water table below soil):
+     ```
+     wa  = wa  - rsub_top * dt
+     zwt = zwt + rsub_top * dt / 1000 / rous
+     ```
+     Excess aquifer water (`wa > 5000 mm`) is pushed to the bottom soil layer.
+   - **`jwt < nlevbed`** (water table within soil): Iterates from `jwt+1` downward, removing water layer-by-layer using specific yield `s_y`:
+     ```
+     rsub_top_layer = max(rsub_top_tot, -(s_y * (zi(j) - zwt) * 1000))
+     zwt = zwt - rsub_top_layer / s_y / 1000   (if remaining >= 0)
+     zwt = zi(j)                                 (otherwise, move to next layer)
+     ```
+     Any residual deepens into the aquifer: `zwt -= residual / 1000 / rous`.
+
+5. **Clamp**: `zwt = max(0, min(80, zwt))`.
+
+6. **Saturation excess redistribution**: Excess liquid water above porosity is pushed upward layer-by-layer; top-layer excess becomes `qflx_rsub_sat`.
+
+7. **`watmin` correction**: If `h2osoi_liq(j) < watmin` at `j == jwt`, water is borrowed from below and `zwt` is deepened: `zwt += xs / eff_porosity / 1000`.
+
+---
+
+### Variable Soil Thickness Option (`zengdecker_2009_with_var_soil_thick = .true.`)
+
+This option is activated when `use_var_soil_thick = .true.` and `soilroot_water_method == zengdecker_2009`. The key conceptual difference is that there is **no unconfined aquifer storage below the soil column** — the bedrock interface `zi(c,nlevbed)` is the hard lower boundary, and `zwt` is confined to remain within the resolved soil layers.
+
+#### Step 1: `soilwater_zengdecker2009` — Richards Equation and `qcharge`
+
+1. **Compute `jwt`**: Uses a modified test:
+   ```fortran
+   if (zwt(c) <= zi(c,j) .and. zwt(c) < zi(c,nlevbed)) then
+      jwt(c) = j-1
+      exit
+   end if
+   ```
+   The additional condition `zwt < zi(nlevbed)` means that when `zwt` is exactly at the bedrock interface, the loop exits without setting `jwt = j-1`, so **`jwt` remains at `nlevbed`**. This signals "water table at bedrock" rather than "water table below soil."
+
+2. **Equilibrium water content and tridiagonal setup**: Same as default.
+
+3. **Bottom boundary condition** (when `jwt == nlevbed`, i.e., water table at bedrock):
+   - `qout(nlevbed) = 0` (zero flux at bottom — no aquifer layer exchange).
+   - Aquifer layer is set as hydrologically inactive: `rmx(nlevbed+1) = 0`, `bmx(nlevbed+1) = dzmm(nlevbed+1)/dtime`.
+
+4. **Bottom boundary condition** (when `jwt < nlevbed`, water table within soil but above bedrock):
+   - **`qout(nlevbed)` is explicitly set to zero** (unlike default which computes flux to aquifer layer).
+   - Aquifer layer is hydrologically inactive.
+
+5. **Compute `qcharge`**:
+   - **`jwt < nlevbed`**: Same formula as default (unsaturated conductivity method).
+   - **`jwt == nlevbed`**: **`qcharge = 0`** (no aquifer layer drainage; contrast with default which uses `dwat2(nlevsoi+1)`).
+
+#### Step 2: `WaterTable` — Update `zwt` from `qcharge`
+
+1. **Recompute `jwt`**: Uses the same bedrock-aware condition — if `zwt == zi(nlevbed)`, `jwt` stays at `nlevbed`.
+
+2. **Apply `qcharge`**:
+   - **`jwt == nlevbed` AND `zengdecker_2009_with_var_soil_thick`**: **The `qcharge` update to `wa` and `zwt` is entirely skipped.** The water table is not pushed below bedrock.
+   - **`jwt < nlevbed`**: Same layer-by-layer iterative update as default (rising/deepening). No residual can push zwt below bedrock because the specific-yield loop terminates at `nlevbed`.
+
+3. **Recompute `jwt`** with the bedrock-aware condition.
+
+#### Step 3: `Drainage` — Topographic Baseflow and Final `zwt` Update
+
+1. **Recompute `jwt`** with bedrock-aware condition.
+
+2. **Perched water table and frost table**: Same logic as default.
+
+3. **Topographic runoff `rsub_top`**:
+   - If `jwt == nlevbed` (water table at bedrock): `rsub_top` is initially set to **zero**.
+   - Then a diagnostic update raises the water table into the bottom soil layer if matric potential indicates near-saturation:
+     ```fortran
+     if (-smp_l(c,nlevbed) < 0.5 * dzmm(c,nlevbed)) then
+        zwt(c) = z(c,nlevbed) - (smp_l(c,nlevbed) / 1000)
+     end if
+     ```
+     After this adjustment, `rsub_top` is recomputed: `rsub_top = imped * rsub_top_max * exp(-fff * zwt)`.
+   - Water is then removed from the bottom layer using the specific yield, and `zwt` is updated:
+     ```fortran
+     rsub_top_layer = max(rsub_top_tot, -(s_y * (zi(nlevbed) - zwt) * 1000))
+     h2osoi_liq(nlevbed) += rsub_top_layer
+     zwt = zwt - rsub_top_layer / s_y / 1000
+     ```
+     If residual drainage exceeds available water, `rsub_top` is reduced to maintain water balance.
+
+4. **Within-soil drainage** (`jwt < nlevbed`): Same layer-by-layer deepening as default, but:
+   - **Residual handling differs**: If `rsub_top_tot` remains after iterating through all layers, instead of deepening `zwt` into a sub-column aquifer, the **drainage flux is reduced**:
+     ```fortran
+     rsub_top(c) = rsub_top(c) + rsub_top_tot / dtime
+     ```
+     This ensures `zwt` never passes below `zi(nlevbed)`.
+
+5. **Clamp**: Same as default — `zwt = max(0, min(80, zwt))`.
+
+6. **Saturation excess and `watmin` correction**: Same as default.
+
+---
+
+### Summary of Key Differences
+
+| Aspect | Default (`origflag==0`) | `zengdecker_2009_with_var_soil_thick` |
+|:-------|:------------------------|:--------------------------------------|
+| Lower boundary | Unconfined aquifer below `nlevsoi`; `zwt` can extend to 80 m | Bedrock at `zi(nlevbed)`; no aquifer storage |
+| `jwt` when `zwt == zi(nlevbed)` | `jwt = nlevbed - 1` (layer above) | `jwt = nlevbed` (signals "at bedrock") |
+| `qcharge` when `jwt == nlevbed` | Computed from aquifer-layer tridiagonal solve | Set to zero |
+| `WaterTable` update when below column | `wa ± qcharge*dt`; `zwt` adjusted by `rous` | Skipped entirely |
+| `rsub_top` when `jwt == nlevbed` | Active; removes from `wa`, deepens `zwt` | Initially zero; conditionally raises `zwt` via `smp_l`, then drains from bottom layer |
+| Residual drainage | Pushed into aquifer (`wa -= residual`; `zwt` deepens) | Drainage flux is *reduced* to prevent `zwt` from exceeding bedrock |
+| Bottom flux in Richards solve | Active exchange between soil and aquifer layer | Zero flux (`qout = 0`); aquifer layer inactive |
