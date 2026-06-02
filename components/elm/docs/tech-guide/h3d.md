@@ -921,3 +921,25 @@ This option is activated when `use_var_soil_thick = .true.` and `soilroot_water_
 | `rsub_top` when `jwt == nlevbed` | Active; removes from `wa`, deepens `zwt` | Initially zero; conditionally raises `zwt` via `smp_l`, then drains from bottom layer |
 | Residual drainage | Pushed into aquifer (`wa -= residual`; `zwt` deepens) | Drainage flux is *reduced* to prevent `zwt` from exceeding bedrock |
 | Bottom flux in Richards solve | Active exchange between soil and aquifer layer | Zero flux (`qout = 0`); aquifer layer inactive |
+
+---
+
+### Potential Issues with `zengdecker_2009_with_var_soil_thick`
+
+1. **Floating-point equality check for bedrock boundary** — The `jwt` logic relies on exact equality (`zwt(c) == zi(c,nlevbed)`). If `zwt` differs from `zi(nlevbed)` by even a rounding error, the code path switches entirely between "at bedrock" (`qcharge=0`, `rsub_top=0`) and "above bedrock" (full recharge/drainage active), potentially causing oscillatory instability.
+
+2. **No aquifer buffer → abrupt transitions** — The default option uses `wa` (aquifer storage, up to 5000 mm) as a smoothing buffer. The var\_soil\_thick option has no such buffer, so `zwt` must respond entirely within the finite soil column, making water table movements more abrupt and potentially timestep-sensitive.
+
+3. **`zwt` can get stuck at bedrock** — When `jwt == nlevbed`: `qcharge = 0`, the WaterTable update is skipped, and `rsub_top` starts at zero. The only mechanism to raise `zwt` back up is the diagnostic matric-potential check:
+   ```fortran
+   if (-smp_l(c,nlevbed) < 0.5 * dzmm(c,nlevbed)) then
+      zwt(c) = z(c,nlevbed) - (smp_l(c,nlevbed) / 1000)
+   end if
+   ```
+   If the bottom layer doesn't reach near-saturation (e.g., in dry conditions or when ice is present), `zwt` remains pinned at bedrock indefinitely even if upper layers are wetting.
+
+4. **Potential water balance leak when deepening** — In the WaterTable subroutine, if negative `qcharge` pushes `zwt` to `zi(nlevbed)` before all `qcharge_tot` is consumed, the remaining recharge has nowhere to go — there is no aquifer to absorb it and no explicit water balance correction for the residual.
+
+5. **Inconsistent state during Drainage** — The `smp_l` used to diagnostically raise `zwt` was computed during the Richards solve assuming `jwt == nlevbed` (water table at bedrock), with equilibrium profiles (`vol_eq`, `zq`) set for that configuration. Moving `zwt` above bedrock mid-Drainage creates a state inconsistent with the Richards solve assumptions, which could accumulate errors over many timesteps.
+
+6. **Discontinuous `rsub_top` at the `jwt` boundary** — When `jwt` transitions from `nlevbed` to `nlevbed-1`, topographic drainage jumps from the special bottom-layer-only treatment to the full layer-by-layer iteration. The drainage rate can change discontinuously, potentially causing `zwt` to oscillate across the boundary.
