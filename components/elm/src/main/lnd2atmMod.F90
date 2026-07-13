@@ -300,6 +300,9 @@ contains
       qflx_rofliq_qsurp_grc => lnd2atm_vars%qflx_rofliq_qsurp_grc  , &
       qflx_irr_demand       => col_wf%qflx_irr_demand , &
       qflx_irr_demand_grc   => lnd2atm_vars%qflx_irr_demand_grc   , &
+      qflx_lateral_grc   => lnd2atm_vars%qflx_lateral_grc   , &
+      qflx_lateral            => col_wf%qflx_lateral , &
+
       qflx_drain            => col_wf%qflx_drain , &
       qflx_rofliq_qsub_grc  => lnd2atm_vars%qflx_rofliq_qsub_grc   , &
       qflx_drain_perched    => col_wf%qflx_drain_perched , &
@@ -486,6 +489,11 @@ contains
     call c2g( bounds, &
          qflx_irr_demand    (bounds%begc:bounds%endc)   , &
          qflx_irr_demand_grc(bounds%begg:bounds%endg)   , &
+         c2l_scale_type= urbanf, l2g_scale_type=unity )
+
+    call c2g( bounds, &
+         qflx_lateral          (bounds%begc:bounds%endc)   , &
+         qflx_lateral_grc(bounds%begg:bounds%endg)   , &
          c2l_scale_type= urbanf, l2g_scale_type=unity )
 
     call c2g( bounds, &

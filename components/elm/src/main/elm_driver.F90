@@ -917,6 +917,7 @@ contains
             filter(nc)%num_hydrologyc, filter(nc)%hydrologyc,                &
             filter(nc)%num_hydrononsoic, filter(nc)%hydrononsoic,            &
             filter(nc)%num_urbanc, filter(nc)%urbanc,                        &
+            filter(nc)%num_h3dc, filter(nc)%h3dc,                 &
             filter(nc)%num_snowc, filter(nc)%snowc,                          &
             filter(nc)%num_nosnowc, filter(nc)%nosnowc,canopystate_vars,     &
             atm2lnd_vars, ocn2lnd_vars, lnd2atm_vars, soilstate_vars,        &

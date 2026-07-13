@@ -338,7 +338,7 @@ contains
                   + qflx_surf_irrig_col(c) + qflx_over_supply_col(c) &
                   - qflx_evap_tot(c) - qflx_surf(c)  - qflx_h2osfc_surf(c) - qflx_to_downhill(c) &
                   - qflx_qrgwl(c) - qflx_drain(c) - qflx_drain_perched(c) - qflx_snwcp_ice(c) - qflx_ice_runoff_xs(c) &
-                  - qflx_lateral(c) + qflx_h2orof_drain(c) - qflx_lnd2ocn(c) + qflx_h2oocn_drain(c)) * dtime
+                  + qflx_lateral(c) + qflx_h2orof_drain(c) - qflx_lnd2ocn(c) + qflx_h2oocn_drain(c)) * dtime
 
              dwb(c) = (endwb(c)-begwb(c))/dtime
 

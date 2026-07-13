@@ -161,7 +161,7 @@ contains
          if (zengdecker_2009_with_var_soil_thick) then
             nlevbed = nlev2bed(c)
             fff(c) = 0.5_r8 * col_pp%zi(c,nlevsoi) / min(col_pp%zi(c,nlevbed), col_pp%zi(c,nlevsoi))
-            if (use_h3d) then
+            if (use_h3d .and. zengdecker_2009_with_var_soil_thick) then
                fff(c) = 2.0_r8 * col_pp%zi(c,nlevsoi) / min(col_pp%zi(c,nlevbed),col_pp%zi(c,nlevsoi))
             end if
          end if
@@ -318,6 +318,7 @@ contains
      use ocn2lndType      , only : ocn2lnd_type
      use lnd2atmType      , only : lnd2atm_type
      use subgridAveMod    , only : c2g
+     use SoilWaterMovementMod, only : zengdecker_2009_with_var_soil_thick
      !
      ! !ARGUMENTS:
      type(bounds_type)        , intent(in)    :: bounds
@@ -532,7 +533,7 @@ contains
                   qinmax=minval(10._r8**(-e_ice*(icefrac(c,1:3)))*hksat(c,1:3))
                 else
                   qinmax=(1._r8 - fsat(c)) * minval(10._r8**(-e_ice*(icefrac(c,1:3)))*hksat(c,1:3))
-                  if (use_h3d) then
+                  if (use_h3d .and. zengdecker_2009_with_var_soil_thick) then
                      qinmax=(1._r8 - fsat(c)) * minval(hksat(c,1:3))
                   end if
                 end if
@@ -2939,7 +2940,7 @@ filter_hydrologyc, num_urbanc, filter_urbanc,  &
              if (use_vsfm) rsub_top(c) = 0._r8
 
              !no need to compute drainage for h3d soil columns
-             if (use_h3d .and. col_pp%h3d_active(c)) then
+             if (use_h3d .and. col_pp%h3d_active(c) .and. zengdecker_2009_with_var_soil_thick) then
                 tmp_rsub_top(c) = rsub_top(c) / 1000._r8 !mm/s -> m/s
                 rsub_top(c) = 0._r8
                 h3d_imped(c) = imped
@@ -3073,7 +3074,7 @@ filter_hydrologyc, num_urbanc, filter_urbanc,  &
 !====================================================================================================================
        !h3d code 
        !for filter_h3dc only
-       if (use_h3d) then
+       if (use_h3d .and. zengdecker_2009_with_var_soil_thick) then
 
         do fc = 1, num_h3dc
           c = filter_h3dc(fc)
@@ -3363,7 +3364,7 @@ filter_hydrologyc, num_urbanc, filter_urbanc,  &
        end do
 
        ! add saturation-excess runoff from h3d to qflx_rsub_sat
-       if (use_h3d) then
+       if (use_h3d .and. zengdecker_2009_with_var_soil_thick) then
          do fc = 1, num_h3dc
            c = filter_h3dc(fc)
            qflx_rsub_sat(c) = qflx_rsub_sat(c) + qflx_rsub_sat_h3d(c)
@@ -3407,7 +3408,7 @@ filter_hydrologyc, num_urbanc, filter_urbanc,  &
        end do
 
        !double check if negtive drainage exists
-       if (use_h3d) then
+       if (use_h3d .and. zengdecker_2009_with_var_soil_thick) then
        do fc = 1,num_h3dc,nh3dc_per_lunit  !loop for all soil columns that belong to same land unit
          c0 = filter_h3dc(fc)
          l  = col_pp%landunit(c0)

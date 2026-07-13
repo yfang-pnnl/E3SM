@@ -42,7 +42,7 @@ contains
        num_nolakec, filter_nolakec, &
        num_hydrologyc, filter_hydrologyc, &
        num_hydrononsoic, filter_hydrononsoic, &
-       num_urbanc, filter_urbanc, &
+       num_urbanc, filter_urbanc, num_h3dc, filter_h3dc, &
        num_snowc, filter_snowc, &
        num_nosnowc, filter_nosnowc, canopystate_vars, &
        atm2lnd_vars, ocn2lnd_vars, lnd2atm_vars, soilstate_vars, &
@@ -89,6 +89,8 @@ contains
     integer                  , intent(in)    :: filter_hydrononsoic(:)  ! column filter for non-soil hydrology points
     integer                  , intent(in)    :: num_urbanc           ! number of column urban points in column filter
     integer                  , intent(in)    :: filter_urbanc(:)     ! column filter for urban points
+    integer                  , intent(in)    :: num_h3dc           ! number of column urban points in column filter
+    integer                  , intent(in)    :: filter_h3dc(:)     ! column filter for urban points
     integer                  , intent(inout) :: num_snowc            ! number of column snow points
     integer                  , intent(inout) :: filter_snowc(:)      ! column filter for snow points
     integer                  , intent(inout) :: num_nosnowc          ! number of column non-snow points
@@ -242,14 +244,14 @@ contains
       if (use_pflotran .and. pf_hmode) then
 
         call SoilWater(bounds, num_hydrononsoic, filter_hydrononsoic, &
-            num_urbanc, filter_urbanc, &
+            num_urbanc, filter_urbanc, num_h3dc, filter_h3dc, &
             soilhydrology_vars, soilstate_vars, dtime)
 
       else
       !------------------------------------------------------------------------------------
 
         call SoilWater(bounds, num_hydrologyc, filter_hydrologyc, num_urbanc, filter_urbanc, &
-            soilhydrology_vars, soilstate_vars, dtime)
+            num_h3dc, filter_h3dc, soilhydrology_vars, soilstate_vars, dtime)
 
       !------------------------------------------------------------------------------------
       end if

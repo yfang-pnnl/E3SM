@@ -61,6 +61,7 @@ contains
     use elm_varpar       , only : nlevgrnd, nlevurb, nlevsoi
     use SoilHydrologyMod , only : ELMVICMap, Drainage, DrainageH3D
     use elm_varctl       , only : use_vsfm, use_IM2_hillslope_hydrology, use_h3d
+     use SoilWaterMovementMod, only : zengdecker_2009_with_var_soil_thick
     !
     ! !ARGUMENTS:
     type(bounds_type)        , intent(in)    :: bounds
@@ -151,11 +152,12 @@ contains
 #endif
 
       if (.not. use_vsfm) then
-        if (use_h3d) then
+        if (use_h3d .and. zengdecker_2009_with_var_soil_thick) then
            call DrainageH3D(bounds, num_h3dc, filter_h3dc, num_hydrologyc, &
                 filter_hydrologyc, num_urbanc, filter_urbanc, &
                 soilhydrology_vars, soilstate_vars, dtime)
         else
+!print *,'junk-drainage'
            call Drainage(bounds, num_hydrologyc, filter_hydrologyc, &
                 num_urbanc, filter_urbanc,&
                 soilhydrology_vars, soilstate_vars, ocn2lnd_vars, dtime)

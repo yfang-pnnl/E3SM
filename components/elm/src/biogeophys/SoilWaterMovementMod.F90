@@ -7,6 +7,7 @@ module SoilWaterMovementMod
   ! created by Jinyun Tang, Mar 12, 2014
   ! added variable DTB option for Zeng-Decker, Michael A. Brunke, Aug. 25, 2016
   !
+  use SoilWaterMovementLateralMod, only : ComputeLateralUnsatFlux, SolveLateralSatFlow
   use ColumnDataType    , only : col_es, col_ws, col_wf
   use VegetationDataType, only : veg_wf
   use shr_log_mod         , only : errMsg => shr_log_errMsg
@@ -80,7 +81,7 @@ contains
 
   !-----------------------------------------------------------------------
   subroutine SoilWater(bounds, num_hydrologyc, filter_hydrologyc, &
-       num_urbanc, filter_urbanc, soilhydrology_vars, soilstate_vars, dt)
+       num_urbanc, filter_urbanc, num_h3dc, filter_h3dc, soilhydrology_vars, soilstate_vars, dt)
     !
     ! DESCRIPTION
     ! select one subroutine to do the soil and root water coupling
@@ -104,6 +105,8 @@ contains
     integer                  , intent(in)    :: filter_hydrologyc(:)  ! column filter for soil points
     integer                  , intent(in)    :: num_urbanc            ! number of column urban points in column filter
     integer                  , intent(in)    :: filter_urbanc(:)      ! column filter for urban points
+    integer                  , intent(in)    :: num_h3dc            ! number of column urban points in column filter
+    integer                  , intent(in)    :: filter_h3dc(:)      ! column filter for urban points
     type(soilhydrology_type) , intent(inout) :: soilhydrology_vars
     type(soilstate_type)     , intent(inout) :: soilstate_vars
     real(r8)                 , intent(in)    :: dt
@@ -132,7 +135,7 @@ contains
     case (zengdecker_2009)
 
        call soilwater_zengdecker2009(bounds, num_hydrologyc, filter_hydrologyc, &
-            num_urbanc, filter_urbanc, soilhydrology_vars, soilstate_vars, dt)
+            num_urbanc, filter_urbanc, num_h3dc, filter_h3dc, soilhydrology_vars, soilstate_vars, dt)
 
     case (vsfm)
 #ifdef USE_PETSC_LIB
@@ -202,7 +205,7 @@ contains
 
   !-----------------------------------------------------------------------
   subroutine soilwater_zengdecker2009(bounds, num_hydrologyc, filter_hydrologyc, &
-       num_urbanc, filter_urbanc, soilhydrology_vars, soilstate_vars, dtime)
+       num_urbanc, filter_urbanc, num_h3dc, filter_h3dc, soilhydrology_vars, soilstate_vars, dtime)
     !
     ! !DESCRIPTION:
     ! Soil hydrology
@@ -282,6 +285,7 @@ contains
     use SoilHydrologyType    , only : soilhydrology_type
     use VegetationType       , only : veg_pp
     use ColumnType           , only : col_pp
+    use elm_varctl        , only : use_h3d
     !
     ! !ARGUMENTS:
     implicit none
@@ -290,6 +294,8 @@ contains
     integer                 , intent(in)    :: filter_hydrologyc(:) ! column filter for soil points
     integer                 , intent(in)    :: num_urbanc           ! number of column urban points in column filter
     integer                 , intent(in)    :: filter_urbanc(:)     ! column filter for urban points
+    integer                 , intent(in)    :: num_h3dc           ! number of column urban points in column filter
+    integer                 , intent(in)    :: filter_h3dc(:)     ! column filter for urban points
     type(soilhydrology_type), intent(inout) :: soilhydrology_vars
     type(soilstate_type)    , intent(inout) :: soilstate_vars
     real(r8), intent(in) :: dtime                                        ! land model time step (sec)
@@ -345,6 +351,8 @@ contains
     real(r8) :: dsmpds                                       !temporary variable
     real(r8) :: dhkds                                        !temporary variable
     real(r8) :: hktmp                                        !temporary variable
+    real(r8) :: qflx_lateral_s(bounds%begc:bounds%endc,1:nlevgrnd+1),qflx_up_to_dn           !lateral flux in unsaturated soil, lateral flux for each interface [mm h2o/s]
+
     !-----------------------------------------------------------------------
 
     associate(&
@@ -377,6 +385,9 @@ contains
          qflx_deficit      =>    col_wf%qflx_deficit    , & ! Input:  [real(r8) (:)   ]  water deficit to keep non-negative liquid water content
          qflx_infl         =>    col_wf%qflx_infl       , & ! Input:  [real(r8) (:)   ]  infiltration (mm H2O /s)
          qflx_rootsoi_col  =>    col_wf%qflx_rootsoi    , & ! Input: [real(r8) (:,:) ]  vegetation/soil water exchange (mm H2O/s) (+ = to atm)
+         qflx_lateral_col  =>    col_wf%qflx_lateral    , & ! Input: [real(r8) (:,:) ]  lateral subsurface flow
+         qflx_lat_layer    =>    col_wf%qflx_lat_layer    , & ! Input: [real(r8) (:,:) ]  lateral subsurface flow
+
          t_soisno          =>    col_es%t_soisno        & ! Input:  [real(r8) (:,:) ]  soil temperature (Kelvin)
          )
 
@@ -574,6 +585,31 @@ contains
          else
             dzmm(c,nlevbed+1) = (1.e3_r8*zwt(c) - zmm(c,nlevbed))
          end if
+         qflx_lateral_col(c) = 0.0_r8
+         if(use_h3d) then
+          do j = 1, nlevbed
+             qflx_lateral_col(c) = qflx_lateral_col(c) + qflx_lateral_s(c,j)
+             qflx_lat_layer(c,j) = qflx_lateral_s(c,j)
+          end do
+         else
+             qflx_lateral_s(c,:) = 0.0_r8
+         endif
+      end do
+      
+
+      ! Compute lateral flux
+      if(use_h3d .and. (.not.zengdecker_2009_with_var_soil_thick)) &
+      call ComputeLateralUnsatFlux(bounds, num_hydrologyc, filter_hydrologyc, &
+           num_urbanc, filter_urbanc, num_h3dc, filter_h3dc, soilhydrology_vars, soilstate_vars, jwt, qflx_lateral_s)
+      
+      do fc = 1, num_hydrologyc
+         c = filter_hydrologyc(fc)
+         nlevbed = nlev2bed(c)
+         qflx_lateral_col(c) = 0.0_r8
+         do j = 1, nlevbed
+             qflx_lateral_col(c) = qflx_lateral_col(c) + qflx_lateral_s(c,j)
+             qflx_lat_layer(c,j) = qflx_lateral_s(c,j)
+         end do
       end do
 
       ! Set up r, a, b, and c vectors for tridiagonal solution
@@ -590,7 +626,7 @@ contains
          qout(c,j)   = -hk(c,j)*num/den
          dqodw1(c,j) = -(-hk(c,j)*dsmpdw(c,j)   + num*dhkdw(c,j))/den
          dqodw2(c,j) = -( hk(c,j)*dsmpdw(c,j+1) + num*dhkdw(c,j))/den
-         rmx(c,j) =  qin(c,j) - qout(c,j) - qflx_rootsoi_col(c,j)
+         rmx(c,j) =  qin(c,j) - qout(c,j) + qflx_lateral_s(c,j) - qflx_rootsoi_col(c,j)
          amx(c,j) =  0._r8
          bmx(c,j) =  dzmm(c,j)*(sdamp+1._r8/dtime) + dqodw1(c,j)
          cmx(c,j) =  dqodw2(c,j)
@@ -614,7 +650,7 @@ contains
             qout(c,j)   = -hk(c,j)*num/den
             dqodw1(c,j) = -(-hk(c,j)*dsmpdw(c,j)   + num*dhkdw(c,j))/den
             dqodw2(c,j) = -( hk(c,j)*dsmpdw(c,j+1) + num*dhkdw(c,j))/den
-            rmx(c,j)    =  qin(c,j) - qout(c,j) -  qflx_rootsoi_col(c,j)
+            rmx(c,j)    =  qin(c,j) - qout(c,j) + qflx_lateral_s(c,j) -  qflx_rootsoi_col(c,j)
             amx(c,j)    = -dqidw0(c,j)
             bmx(c,j)    =  dzmm(c,j)/dtime - dqidw1(c,j) + dqodw1(c,j)
             cmx(c,j)    =  dqodw2(c,j)
@@ -636,7 +672,7 @@ contains
             dqidw1(c,j) = -( hk(c,j-1)*dsmpdw(c,j)   + num*dhkdw(c,j-1))/den
             qout(c,j)   =  0._r8
             dqodw1(c,j) =  0._r8
-            rmx(c,j)    =  qin(c,j) - qout(c,j) - qflx_rootsoi_col(c,j)
+            rmx(c,j)    =  qin(c,j) - qout(c,j) + qflx_lateral_s(c,j) - qflx_rootsoi_col(c,j)
             amx(c,j)    = -dqidw0(c,j)
             bmx(c,j)    =  dzmm(c,j)/dtime - dqidw1(c,j) + dqodw1(c,j)
             cmx(c,j)    =  0._r8
@@ -685,7 +721,7 @@ contains
                dqodw2(c,j) = -( hk(c,j)*dsmpdw1 + num*dhkdw(c,j))/den
             end if
 
-            rmx(c,j) =  qin(c,j) - qout(c,j) - qflx_rootsoi_col(c,j)
+            rmx(c,j) =  qin(c,j) - qout(c,j) + qflx_lateral_s(c,j) - qflx_rootsoi_col(c,j)
             amx(c,j) = -dqidw0(c,j)
             bmx(c,j) =  dzmm(c,j)/dtime - dqidw1(c,j) + dqodw1(c,j)
             cmx(c,j) =  dqodw2(c,j)
@@ -828,6 +864,10 @@ contains
             endif
          endif
       end do
+
+      if(use_h3d .and. (.not.zengdecker_2009_with_var_soil_thick))  &
+      call SolveLateralSatFlow(bounds, num_hydrologyc, filter_hydrologyc, &
+           num_urbanc, filter_urbanc, num_h3dc, filter_h3dc, soilhydrology_vars, soilstate_vars, jwt)
 
       ! compute the water deficit and reset negative liquid water content
       !  Jinyun Tang
