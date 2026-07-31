@@ -6072,6 +6072,7 @@ contains
 
     this%qflx_from_uphill(begc:endc) = 0._r8
     this%qflx_to_downhill(begc:endc) = 0._r8
+    this%qflx_lnd2ocn(begc:endc) = 0._r8
 
     ! needed for CNNLeaching
     do c = begc, endc
@@ -6079,7 +6080,6 @@ contains
        if (col_pp%is_soil(c) .or. col_pp%is_crop(c)) then
           this%qflx_drain(c) = 0._r8
           this%qflx_surf(c)  = 0._r8
-          this%qflx_lnd2ocn(c) = 0._r8
        end if
     end do
 
