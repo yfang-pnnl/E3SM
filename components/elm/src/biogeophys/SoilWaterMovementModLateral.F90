@@ -14,6 +14,8 @@ module SoilWaterMovementLateralMod
 
   public :: ComputeLateralUnsatFlux
   public :: SolveLateralSatFlow
+  private :: LateralResponse       ! implicit H3D saturated-zone lateral solve (ported from SoilHydrologyMod)
+  private :: Tridiagonal_h3D       ! tridiagonal solver used by LateralResponse (ported from SoilHydrologyMod)
 
 contains
   !
@@ -251,6 +253,13 @@ contains
     real(r8) :: depth_up, depth_down, qlat_balance_error, qlat_storage_change
     real(r8) :: dtime, qlat_layer, qlat_tot, qlat_temp, s_y, h2osoi_left_vol, h2osoi_avail, qlat_from_wa
     real(r8) :: rous, sy, trans, theta, storage_before, storage_after,wa_left_vol, wa_excess
+    ! Locals for the implicit H3D lateral saturated-zone solver (LateralResponse)
+    real(r8) :: h_sat_begin(nh3dc_per_lunit)  ! saturated-zone level at start of ELM step [m]
+    real(r8) :: h_sat_old  (nh3dc_per_lunit)  ! saturated-zone level at previous sub-step  [m]
+    real(r8) :: h_sat      (nh3dc_per_lunit)  ! saturated-zone level at current  sub-step  [m]
+    real(r8) :: dt_h3d_loc                    ! adaptive H3D sub-time-step [s]
+    real(r8) :: dt_h3d_tot                    ! accumulated H3D sub-time [s]
+    logical  :: iter_conv                     ! LateralResponse iteration convergence flag
 
     !-----------------------------------------------------------------------
 
@@ -278,6 +287,12 @@ contains
 ! Input   [real(r8) (:,:) ]  
          hs_slope         =>    col_pp%h3d_slope                       ,      &
 ! Input:  [real(r8) (:)   ] gridcell topographic slope (degree)
+         zibed          =>    col_pp%zibed                       ,      &
+! Input:  [real(r8) (:)   ] bedrock depth in model (interface level at nlevbed)
+         f_drain        =>    col_pp%f_drain                     ,      &
+! Inout:  [real(r8) (:)   ] drainable porosity (= specific yield s_y) used by LateralResponse
+         zwtbed         =>    soilhydrology_vars%zwtbed_h3d_col  ,      &
+! Inout:  [real(r8) (:)   ] max. zwt allowed: zibed if var_soil_thickness, else 25+zibed
          wa             => soilhydrology_vars%wa_col         & ! Output: [real(r8) (:)   ]  water in the unconfined aquifer (mm)
 
          )
@@ -336,57 +351,91 @@ contains
 #endif
       !=========================================================================
 
+      ! ------------------------------------------------------------------
+      ! Implicit saturated-zone lateral solve (ported from the H3D reference
+      ! LateralResponse / H3D_DRI in SoilHydrologyMod).  This replaces the
+      ! previous EXPLICIT transmissivity * head-gradient estimate.
+      !
+      ! The explicit single-step flux systematically over-estimated the
+      ! lateral exchange relative to the reference H3D scheme, so the
+      ! downstream storage-update logic had to clip it (pore space, watmin,
+      ! wa limits).  That clipping, combined with recovering a tiny net
+      ! transfer by differencing two large storage sums, is what pushed
+      ! errh2o above the BalanceCheckMod tolerance.
+      !
+      ! Here the saturated-zone level h_sat (= zwtbed - zwt) is advanced
+      ! implicitly for the whole H3D group with adaptive sub-time-stepping,
+      ! exactly as LateralResponse/H3D_DRI do.  The resulting
+      ! specific-yield-weighted saturated-storage change per column is then
+      ! converted to a net lateral flux [mm/s]:
+      !
+      !     qflx_lateral_s(c) = f_drain(c) * (h_sat - h_sat_begin) * 1000 / dt
+      !
+      ! (positive => saturated zone rose => water entered the column).  The
+      ! conservative storage-update block below applies exactly this amount to
+      ! wa / h2osoi_liq / zwt and reports the accepted flux, so the per-column
+      ! ELM water balance closes.
+      ! ------------------------------------------------------------------
       do fc = 1,num_h3dc,nh3dc_per_lunit  !loop for all soil columns that belong to same land unit
         c0 = filter_h3dc(fc)
         h3d_begc = c0
         h3d_endc = c0+nh3dc_per_lunit-1
         l  = col_pp%landunit(c0)
 
-        do k = 1, nh3dc_per_lunit-1
-           col_id_up = c0+(k+1)-1
-           col_id_dn = c0+k-1
-           c = col_id_dn
+        if (lun_pp%hs_area(l) == 0._r8) cycle
 
-               ! local grid cell
-            depth_up = zi(col_id_up,nlevgrnd) - zwt(col_id_up)  ! groundwater head(m)
-            depth_down = zi(col_id_dn,nlevgrnd) - zwt(col_id_dn)
+        ! Bottom boundary of the saturated zone (max. allowed water-table depth)
+        ! and the saturated-zone level at the start of the ELM step [m].
+        do k = 1, nh3dc_per_lunit
+           c = c0+k-1
+           if (use_var_soil_thick) then
+              zwtbed(c) = zibed(c)
+           else
+              zwtbed(c) = 25._r8 + zibed(c)
+           end if
+           h_sat_begin(k) = zwtbed(c) - zwt(c)
+           h_sat_old(k)   = h_sat_begin(k)
+        end do
 
-            ! Use the saturated conductivity at the layer adjacent to each
-            ! column's water table, consistent with the H3D LateralResponse
-            ! formulation.  A fixed deep layer can strongly overestimate the
-            ! saturated transmissivity and lateral flux.
-            idx_up = min(jwt(col_id_up)+1,nlev2bed(col_id_up))
-            idx_dn = min(jwt(col_id_dn)+1,nlev2bed(col_id_dn))
-            hksat_up = hksat(col_id_up,idx_up)
-            hksat_dn = hksat(col_id_dn,idx_dn)
+        ! Adaptive sub-time-stepping of the implicit lateral solve.
+        dt_h3d_loc = dtime
+        dt_h3d_tot = 0._r8
+        do while (dt_h3d_tot < dtime)
+           dt_h3d_tot = dt_h3d_tot + dt_h3d_loc
 
-            den = hs_dx_nod(l,k+1)*1000._r8
+           ! Degenerate (zero-thickness) saturated zone: no lateral exchange
+           ! this sub-step, mirror the H3D_DRI guard.
+           if (any(h_sat_old(1:nh3dc_per_lunit) == 0._r8)) then
+              h_sat(1:nh3dc_per_lunit)   = h_sat_old(1:nh3dc_per_lunit)
+              f_drain(h3d_begc:h3d_endc) = 0.2_r8
+              cycle
+           end if
 
-            depth_up = max(depth_up, 0._r8)
-            depth_down= max(depth_down, 0._r8)
-            theta = hs_slope(c)/180._r8*rpi
+           call LateralResponse(soilstate_vars, soilhydrology_vars, l, c0,     &
+                dt_h3d_loc, 0._r8, jwt(h3d_begc:h3d_endc),                     &
+                h_sat_old(1:nh3dc_per_lunit), h_sat(1:nh3dc_per_lunit), iter_conv)
 
-            ! Apply frozen-soil hydraulic impedance, consistent with the
-            ! unsaturated lateral-flow and drainage formulations.
-            if (origflag == 1) then
-               impedl = 1._r8 - 0.5_r8*(fracice(col_id_up,idx_up) + fracice(col_id_dn,idx_dn))
-            else
-               impedl = 10._r8**(-e_ice*(0.5_r8*(icefrac(col_id_up,idx_up) + icefrac(col_id_dn,idx_dn))))
-            endif
+           if (iter_conv) then
+              do k = 1, nh3dc_per_lunit
+                 h_sat(k)     = max(0._r8, h_sat(k))
+                 h_sat_old(k) = h_sat(k)
+              end do
+           else
+              ! Reject this sub-step, halve dt and retry.
+              dt_h3d_tot = dt_h3d_tot - dt_h3d_loc
+              dt_h3d_loc = 0.5_r8 * dt_h3d_loc
+              if (dt_h3d_loc < 10._r8) write(iulog,*) 'h3d lateral time step!!!'
+           end if
+        end do
 
-            ! calculate transmissivity
-            trans = impedl*sqrt(hksat_up*hksat_dn)*(depth_up+depth_down)/2._r8*1000._r8 !* 0.01 ! (mm2/s)
-            qflx_up_to_dn = -trans*((depth_down-depth_up)*1000._r8/den*cos(theta) + sin(theta))
-
-            ! qflx_up_to_dn is an integrated saturated flow per unit width [mm2/s].
-            ! Convert it back to an areal flux [mm/s] by dividing by the H3D
-            ! column length in mm. hs_dx is stored in m, so multiply by 1000.
-            qflx_lateral_s(col_id_up) = qflx_lateral_s(col_id_up) - &
-                    qflx_up_to_dn/(hs_dx(l,k+1)*1000._r8)*cos(theta)
-
-            qflx_lateral_s(col_id_dn) = qflx_lateral_s(col_id_dn) + &
-                    qflx_up_to_dn/(hs_dx(l,k)*1000._r8)*cos(theta)
-         enddo
+        ! Net saturated-storage change over the ELM step -> lateral flux [mm/s].
+        ! f_drain holds the drainable porosity (specific yield) at the final
+        ! saturated-zone state, matching the H3D_DRI storage-change accounting.
+        do k = 1, nh3dc_per_lunit
+           c = c0+k-1
+           qflx_lateral_s(c) = f_drain(c) * (h_sat_old(k) - h_sat_begin(k))     &
+                * 1000._r8 / dtime
+        end do
       enddo
 
          ! IMPORTANT: iterate over exactly the H3D columns whose saturated
