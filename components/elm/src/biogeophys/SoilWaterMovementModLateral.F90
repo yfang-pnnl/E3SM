@@ -881,4 +881,200 @@ enddo
 
   end subroutine ThetaBasedWaterTable
 
+  !-----------------------------------------------------------------------
+  subroutine LateralResponse(soilstate_vars,soilhydrology_vars,l,c0,dt_h3d,rsub_top_default,jwt,h_sat_old,h_sat,iter_conv)
+    !
+    ! !DESCRIPTION:
+    ! Calculate lateral subsurface saturated-zone response and water-table
+    ! variation using the H3D implicit tridiagonal scheme.
+    !
+    ! This routine is ported verbatim (aside from module-local USE statements)
+    ! from SoilHydrologyMod::LateralResponse so that SolveLateralSatFlow can use
+    ! the same implicit / sub-stepped saturated-zone solver as the reference H3D
+    ! drainage.  It cannot simply `use SoilHydrologyMod` because that module
+    ! depends (through SoilWaterMovementMod) on this module, which would create a
+    ! circular module dependency.
+    !
+    ! !USES:
+    use shr_kind_mod     , only : r8 => shr_kind_r8
+    use elm_time_manager , only : get_step_size
+    use elm_varcon       , only : rpi
+    use elm_varpar       , only : nh3dc_per_lunit
+    use elm_varctl       , only : iulog
+    use SoilStateType    , only : soilstate_type
+    use SoilHydrologyType, only : soilhydrology_type
+    use ColumnType       , only : col_pp
+    use LandunitType     , only : lun_pp
+    !
+    ! !ARGUMENTS:
+    type(soilstate_type)     , intent(in)    :: soilstate_vars
+    type(soilhydrology_type) , intent(in)    :: soilhydrology_vars
+    integer  , intent(in)   :: l                              !landunit index
+    integer  , intent(in)   :: c0                             !soil column index pointing to the first colum in landunit l
+    real(r8) , intent(in)   :: dt_h3d                         !h3d time step (sec)
+    integer  , intent(in)   :: jwt(:)                         ! index of the soil layer right above the water table (-)
+    real(r8) , intent(in)   :: h_sat_old(:)                   !Saturated zone level at previous timestep [m]
+    real(r8) , intent(out)  :: h_sat    (:)                   !Saturated zone level at current iteration [m]
+    logical  , intent(out)  :: iter_conv                      !if h3d iteration converges
+    real(r8) , intent(in)   :: rsub_top_default
+    !
+    ! !LOCAL VARIABLES:
+    character(len=32) :: subname = 'LateralResponse'          ! subroutine name
+    integer  :: c,i,j,k                                       ! indices
+    real(r8) :: h_sat_prev (1:nh3dc_per_lunit)                !Saturated zone level at previous iteration [m]
+    real(r8) :: amx(1:nh3dc_per_lunit)                        ! "a" left off diagonal of tridiagonal matrix
+    real(r8) :: bmx(1:nh3dc_per_lunit)                        ! "b" diagonal column for tridiagonal matrix
+    real(r8) :: cmx(1:nh3dc_per_lunit)                        ! "c" right off diagonal tridiagonal matrix
+    real(r8) :: rmx(1:nh3dc_per_lunit)                        ! "r" forcing term of tridiagonal matrix
+    real(r8) :: w_kl_h(1:nh3dc_per_lunit)                     ! Product of the hillslope width function, saturated conductivity and saturated zone level [m^3 s^-1]
+    real(r8) :: h_sat_thres = 1.e-4_r8                        ! threshold of h_sat for iteration converge [m]
+    integer  :: niter_max   = 20
+    integer  :: niter
+    logical  :: ierror
+    integer  :: idx
+    real(r8) :: f_aniso                                       ! factor to scale hk
+    real(r8) :: idx1                                          ! water table layer at the bottom of the column
+    !-----------------------------------------------------------------------
+
+    associate(                                                                &
+         hs_dx            =>    lun_pp%hs_dx                           ,      &
+         hs_dx_nod        =>    lun_pp%hs_dx_node                      ,      &
+         hs_w_itf         =>    lun_pp%hs_w_itf                        ,      &
+         hs_x_itf         =>    lun_pp%hs_x_itf                        ,      &
+         hs_w_nod         =>    lun_pp%hs_w_nod                        ,      &
+         hs_x_nod         =>    lun_pp%hs_x_nod                        ,      &
+         hs_slope         =>    col_pp%h3d_slope                       ,      &
+         zibed            =>    col_pp%zibed                           ,      &
+         f_drain          =>    col_pp%f_drain                         ,      &
+         nlev2bed         =>    col_pp%nlevbed                         ,      &
+         h3d_imped        =>    soilhydrology_vars%imped_h3d_col       ,      &
+         zwtbed           =>    soilhydrology_vars%zwtbed_h3d_col      ,      &
+         hksat            =>    soilstate_vars%hksat_col               ,      &
+         watsat           =>    soilstate_vars%watsat_col              ,      &
+         bsw              =>    soilstate_vars%bsw_col                 ,      &
+         sucsat           =>    soilstate_vars%sucsat_col                     &
+             )
+
+    f_aniso   = 100._r8
+    niter     = 0
+    iter_conv = .false.
+
+    h_sat_prev(:) = h_sat_old(:)
+
+    do while ((.not. iter_conv) .and. (niter < niter_max))
+
+      niter = niter + 1
+
+      do k=1,nh3dc_per_lunit
+        c = c0+k-1
+        idx = min(jwt(k)+1,nlev2bed(c))
+        f_drain(c) = watsat(c,idx) &
+                 * ( 1. - (1.+1.e3*max(0._r8,(zwtbed(c) - h_sat_prev(k))) /sucsat(c,idx))**(-1./bsw(c,idx)))
+        f_drain(c)=max(f_drain(c) ,0.02_r8)
+
+        if (isnan(f_drain(c))) then
+            write(iulog,*) "nan_f_drain",idx,jwt(k),nlev2bed(c)
+            write(iulog,*) "nan_f_drain",zwtbed(c),h_sat_prev(k),sucsat(c,idx),bsw(c,idx)
+        end if
+
+      end do
+
+      do k=1,nh3dc_per_lunit
+        c = c0+k-1
+        idx = min(jwt(k)+1,nlev2bed(c))
+        w_kl_h(k) = f_aniso*hs_w_nod(l,k)*hksat(c,idx)*h_sat_prev(k) / 1000._r8
+      end do
+
+      k = 1
+      c = c0+k-1
+      amx(k) = 0._r8
+      cmx(k) = -1._r8 * w_kl_h(k+1) * cos(hs_slope(c)/180._r8*rpi) * dt_h3d / (hs_dx_nod(l,k+1) * hs_dx(l,k) * hs_w_nod(l,k))
+      bmx(k) = f_drain(c) - (amx(k) + cmx(k))
+      idx1 = min(jwt(k)+1,nlev2bed(c))
+      rmx(k) = f_drain(c) * h_sat_old(k) + dt_h3d / (hs_w_nod(l,k)*hs_dx(l,k)) * &
+               (sin(hs_slope(c)/180._r8*rpi) * w_kl_h(k+1) - cos(hs_slope(c)/180._r8*rpi) / hs_dx(l,k) * hs_w_nod(l,k) * &
+               f_aniso * hksat(c,idx1) / 1000._r8 * (h_sat_prev(k))**2)
+
+
+      do k=2,nh3dc_per_lunit - 1
+        c = c0+k-1
+        amx(k)  = -1._r8 * w_kl_h(k)   * cos(hs_slope(c)/180._r8*rpi) *dt_h3d / (hs_dx_nod(l,k)   * hs_dx(l,k) * hs_w_nod(l,k))
+        cmx(k)  = -1._r8 * w_kl_h(k+1) * cos(hs_slope(c)/180._r8*rpi) *dt_h3d / (hs_dx_nod(l,k+1) * hs_dx(l,k) * hs_w_nod(l,k))
+        bmx(k)  = f_drain(c) - (amx(k) + cmx(k))
+        rmx(k)  = f_drain(c) * h_sat_old(k) + dt_h3d * sin(hs_slope(c)/180._r8*rpi) / &
+                  (hs_w_nod(l,k)*hs_dx(l,k)) * (w_kl_h(k+1) - w_kl_h(k))
+      end do
+
+
+      k = nh3dc_per_lunit
+      c = c0+k-1
+      amx(k) = -1._r8 * w_kl_h(k)   * cos(hs_slope(c)/180._r8*rpi) * dt_h3d / (hs_dx_nod(l,k) * hs_dx(l,k)    * hs_w_nod(l,k))
+      cmx(k) = 0._r8
+      bmx(k) = f_drain(c) - (amx(k) + cmx(k))
+      rmx(k) = f_drain(c) * h_sat_old(k) + dt_h3d * sin(hs_slope(c)/180._r8*rpi) / &
+               (hs_w_nod(l,k)*hs_dx(l,k)) * (- w_kl_h(k))
+
+      call Tridiagonal_h3D(nh3dc_per_lunit, amx, bmx, cmx, rmx, h_sat, ierror )
+
+      if ((maxval(abs(h_sat-h_sat_prev)) < h_sat_thres) .and. .not.(ierror)) then
+        iter_conv = .true.
+      end if
+
+      if (ierror) niter = niter_max
+
+      h_sat_prev(:) = h_sat(:)
+    end do
+
+
+    end associate
+
+  end subroutine LateralResponse
+
+  !-----------------------------------------------------------------------
+  subroutine Tridiagonal_h3D(numf, a, b, c, r, u, ierror)
+    ! !DESCRIPTION:
+    ! Solve a tridiagonal linear system. Ported from SoilHydrologyMod to avoid a
+    ! circular module dependency (see LateralResponse above).
+    !
+    ! !USES:
+    use shr_kind_mod   , only: r8 => shr_kind_r8
+    ! !ARGUMENTS:
+    integer           , intent(in)    :: numf     !  dimension
+    real(r8)          , intent(in)    :: a(1:numf)! "a" left off diagonal of tridiagonal matrix [j]
+    real(r8)          , intent(in)    :: b(1:numf)! "b" diagonal column for tridiagonal matrix [j]
+    real(r8)          , intent(in)    :: c(1:numf)! "c" right off diagonal tridiagonal matrix [j]
+    real(r8)          , intent(in)    :: r(1:numf)! "r" forcing term of tridiagonal matrix [j]
+    real(r8)          , intent(inout) :: u(1:numf)! solution [j]
+    logical           , intent(out)   :: ierror   ! true if error exists
+
+    real(r8)                          :: gam(1:numf)! temporary
+    real(r8)                          :: bet        ! temporary
+    integer                           :: j          !indics
+
+    character(len=255)                :: subname ='Tridiagonal_h3d'
+    !-----------------------------------------------------------------------
+    ierror = .true.
+
+    if (b(1) == 0._r8) return
+
+    bet  = b(1)
+    u(1) = r(1) / bet
+
+    do j=2,numf
+       gam(j) = c(j-1) / bet
+       bet = b(j) - a(j) * gam(j)
+
+       if (bet == 0._r8) return
+
+       u(j) = (r(j) - a(j)*u(j-1)) / bet
+    end do
+
+    do j = numf-1,1,-1
+       u(j) = u(j) - gam(j+1) * u(j+1)
+    end do
+
+
+    ierror = .false.
+  end subroutine Tridiagonal_h3D
+
 end module SoilWaterMovementLateralMod
