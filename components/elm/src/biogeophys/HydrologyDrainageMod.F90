@@ -62,6 +62,8 @@ contains
     use SoilHydrologyMod , only : ELMVICMap, Drainage, DrainageH3D
     use elm_varctl       , only : use_vsfm, use_IM2_hillslope_hydrology, use_h3d
      use SoilWaterMovementMod, only : zengdecker_2009_with_var_soil_thick
+    use SoilWaterMovementLateralMod, only : SolveLateralSatFlow
+    use elm_varpar       , only : nh3dc_per_lunit
     !
     ! !ARGUMENTS:
     type(bounds_type)        , intent(in)    :: bounds
@@ -86,6 +88,10 @@ contains
     real(r8) :: dtime
     real(r8) :: temp_to_downhill, temp_mass
     integer  :: g,t,l,c,j,fc,tpu_ind, downhill_t              ! indices
+    integer  :: k                                             ! h3d intra-landunit column index
+    integer  :: jwt(bounds%begc:bounds%endc)                  ! index of soil layer right above water table (rebuilt from zwt)
+    integer  :: nlevbed_h3d                                   ! number of layers to bedrock (h3d)
+    real(r8) :: qflx_lateral_aquifer(bounds%begc:bounds%endc) ! saturated lateral flux returned by SolveLateralSatFlow [mm/s]
     !-----------------------------------------------------------------------
 
     associate(                                                                  &
@@ -99,6 +105,11 @@ contains
          glc_dyn_runoff_routing => glc2lnd_vars%glc_dyn_runoff_routing_grc    , & ! Input:  [real(r8) (:)   ]  whether we're doing runoff routing appropriate for having a dynamic icesheet
 
          wa                     => soilhydrology_vars%wa_col                  , & ! Input:  [real(r8) (:)   ]  water in the unconfined aquifer (mm)
+         zwt                    => soilhydrology_vars%zwt_col                 , & ! Input:  [real(r8) (:)   ]  water table depth (m)
+         h3d_zwt_lun            => soilhydrology_vars%h3d_zwt_lun             , & ! Output: [real(r8) (:,:) ]  water table depth at h3d columns
+         qflx_lateral_col       => col_wf%qflx_lateral                        , & ! Output: [real(r8) (:)   ]  lateral subsurface flow (mm H2O/s)
+         nlev2bed               => col_pp%nlevbed                             , & ! Input:  [integer  (:)   ]  number of layers to bedrock
+         zi                     => col_pp%zi                                  , & ! Input:  [real(r8) (:,:) ]  interface level below a "z" level (m)
 
          h2osoi_liq_depth_intg  => col_ws%h2osoi_liq_depth_intg , & ! Output: [real(r8) (:)   ]  grid-level depth integrated liquid soil water
          h2osoi_ice_depth_intg  => col_ws%h2osoi_ice_depth_intg , & ! Output: [real(r8) (:)   ]  grid-level depth integrated ice soil water
@@ -164,8 +175,51 @@ contains
         endif
       endif
 
+     !=========================================================================
+     ! H3D saturated lateral flow -- MOVED here from soilwater_zengdecker2009
+     ! (Option B). It must run AFTER Drainage/qcharge (so it does not sit
+     ! between where qcharge is computed and where WaterTable applies it on a
+     ! jwt-branch) but BEFORE endwb is captured below, so its storage change is
+     ! inside the water-balance window. jwt is not passed into this routine, so
+     ! rebuild it from the current (post-drainage) zwt using the same layer scan
+     ! as SoilHydrologyMod, then call SolveLateralSatFlow and add its reported
+     ! flux to qflx_lateral for the balance.
+     if (use_h3d .and. (.not. zengdecker_2009_with_var_soil_thick)) then
+
+        do fc = 1, num_h3dc
+           c = filter_h3dc(fc)
+           nlevbed_h3d = nlev2bed(c)
+           jwt(c) = nlevbed_h3d
+           do j = 1, nlevbed_h3d
+              if (zwt(c) <= zi(c,j)) then
+                 jwt(c) = j-1
+                 exit
+              end if
+           end do
+        end do
+
+        call SolveLateralSatFlow(bounds, num_hydrologyc, filter_hydrologyc, &
+             num_urbanc, filter_urbanc, num_h3dc, filter_h3dc, &
+             soilhydrology_vars, soilstate_vars, jwt, qflx_lateral_aquifer)
+
+        do fc = 1, num_h3dc
+           c = filter_h3dc(fc)
+           qflx_lateral_col(c) = qflx_lateral_col(c) + qflx_lateral_aquifer(c)
+        end do
+
+        do fc = 1, num_h3dc, nh3dc_per_lunit  ! group columns by landunit
+           c = filter_h3dc(fc)
+           l = col_pp%landunit(c)
+           do k = 1, nh3dc_per_lunit
+              h3d_zwt_lun(l,k) = zwt(c+k-1)
+           end do
+        end do
+
+     end if
+     !=========================================================================
+
 #ifndef _OPENACC
-      if (use_betr) then
+     if (use_betr) then
         call ep_betr%BeTRSetBiophysForcing(bounds, col_pp, veg_pp, 1, nlevsoi, waterstate_vars=col_ws, &
           waterflux_vars=col_wf)
         call ep_betr%DiagDrainWaterFlux(num_hydrologyc, filter_hydrologyc)

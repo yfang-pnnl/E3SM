@@ -1091,7 +1091,7 @@ contains
                  - forc_rain_col(c) - forc_snow_col(c)  - qflx_floodc(c) - qflx_from_uphill(c) - qflx_irrig(c) &
                  + qflx_evap_tot(c) + qflx_surf(c)  + qflx_h2osfc_surf(c) + qflx_to_downhill(c) &
                  + qflx_qrgwl(c) + qflx_drain(c) + qflx_drain_perched(c) + qflx_snwcp_ice(c) &
-                 + qflx_lateral(c)
+                 - qflx_lateral(c)
 
          else
 

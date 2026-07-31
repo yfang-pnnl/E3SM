@@ -523,6 +523,8 @@ module ColumnDataType
     real(r8), pointer :: qflx_h2osfc2topsoi   (:)   => null() ! liquid water coming from surface standing water top soil (mm H2O/s)
     real(r8), pointer :: qflx_snow2topsoi     (:)   => null() ! liquid water coming from residual snow to topsoil (mm H2O/s)
     real(r8), pointer :: qflx_lateral         (:)   => null() ! lateral subsurface flux (mm H2O /s)
+    real(r8), pointer :: qflx_lat_layer       (:,:) => null() ! soil layer lateral flow
+
     real(r8), pointer :: qflx_lnd2ocn         (:)   => null() ! lateral flux between water table and sea surface height (mm H2O/s)
     real(r8), pointer :: snow_sources         (:)   => null() ! snow sources (mm H2O/s)
     real(r8), pointer :: snow_sinks           (:)   => null() ! snow sinks (mm H2O/s)
@@ -1389,7 +1391,7 @@ contains
   !------------------------------------------------------------------------
   subroutine col_ws_init(this, begc, endc, h2osno_input, snow_depth_input, watsat_input)
     !
-    use elm_varctl  , only : use_lake_wat_storage, use_arctic_init, use_h3d
+    use elm_varctl  , only : use_lake_wat_storage, use_arctic_init, use_h3d, use_var_soil_thick
     ! !ARGUMENTS:
     class(column_water_state) :: this
     integer , intent(in)      :: begc,endc
@@ -1754,7 +1756,7 @@ contains
                       this%h2osoi_vol(c,j) = 0.70_r8*watsat_input(c,j) !0.15_r8 to avoid very dry conditions that cause errors in FATES
                    else if (use_arctic_init) then
                       this%h2osoi_vol(c,j) = watsat_input(c,j) ! start saturated for arctic
-                   else if (use_h3d) then
+                   else if (use_h3d .and. use_var_soil_thick) then
                       if (j < 5) then
                          this%h2osoi_vol(c,j) = watsat_input(c,j) * 0.6
                       else
@@ -5856,6 +5858,7 @@ contains
     allocate(this%qflx_h2osfc2topsoi     (begc:endc))             ; this%qflx_h2osfc2topsoi   (:)   = spval
     allocate(this%qflx_snow2topsoi       (begc:endc))             ; this%qflx_snow2topsoi     (:)   = spval
     allocate(this%qflx_lateral           (begc:endc))             ; this%qflx_lateral         (:)   = 0._r8
+    allocate(this%qflx_lat_layer          (begc:endc,1:nlevgrnd))  ; this%qflx_lat_layer              (:,:) = nan
     allocate(this%qflx_lnd2ocn           (begc:endc))             ; this%qflx_lnd2ocn         (:)   = spval
     allocate(this%snow_sources           (begc:endc))             ; this%snow_sources         (:)   = spval
     allocate(this%snow_sinks             (begc:endc))             ; this%snow_sinks           (:)   = spval
@@ -5922,6 +5925,11 @@ contains
     call hist_addfld1d (fname='QDRAI',  units='mm/s',  &
          avgflag='A', long_name='sub-surface drainage', &
          ptr_col=this%qflx_drain, c2l_scale_type='urbanf')
+
+    this%qflx_lat_layer(begc:endc,:) = spval
+    call hist_addfld2d (fname='QLAT',  units='mm/s', type2d='levgrnd', &
+         avgflag='A', long_name='Soil layer lateral flux', &
+         ptr_col=this%qflx_lat_layer, l2g_scale_type='veg',default='inactive')
 
     if (use_ocn_lnd_one_way) then
       call hist_addfld1d (fname='QH2OOCN',  units='mm/s',  &

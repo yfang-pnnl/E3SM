@@ -3091,7 +3091,7 @@ filter_hydrologyc, num_urbanc, filter_urbanc,  &
         CALL  H3D_DRI(bounds, num_h3dc, filter_h3dc,  jwt,zwt_h3d, tmp_rsub_top,h3d_rsub_top_max,fff,&
               soilhydrology_vars, soilstate_vars, dtime)
 
-
+print *,'junk 1'
        !need to double check if we need to re-compute zwt, or use zwt from h3d?
        do fc = 1, num_h3dc
           c = filter_h3dc(fc)
@@ -3158,6 +3158,7 @@ filter_hydrologyc, num_urbanc, filter_urbanc,  &
                    wa(c)  = min(wa(c), 5000._r8)
                 end if
              else                                
+print *,'junk 2'
                 !-- water table within soil layers 1-9
                 !-------------------------------------
                 !============================== RSUB_TOP

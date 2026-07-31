@@ -286,6 +286,7 @@ contains
     use VegetationType       , only : veg_pp
     use ColumnType           , only : col_pp
     use elm_varctl        , only : use_h3d
+    use elm_varpar                , only : nh3dc_per_lunit
     !
     ! !ARGUMENTS:
     implicit none
@@ -302,7 +303,7 @@ contains
 
     !
     ! !LOCAL VARIABLES:
-    integer  :: p,c,fc,j                                     ! do loop indices
+    integer  :: p,c,fc,j,l,k                                     ! do loop indices
     integer  :: nlevbed                                      ! number of layers to bedrock
     integer  :: jtop(bounds%begc:bounds%endc)                ! top level at each column
     integer  :: jbot(bounds%begc:bounds%endc)                ! bottom level at each column
@@ -352,6 +353,7 @@ contains
     real(r8) :: dhkds                                        !temporary variable
     real(r8) :: hktmp                                        !temporary variable
     real(r8) :: qflx_lateral_s(bounds%begc:bounds%endc,1:nlevgrnd+1),qflx_up_to_dn           !lateral flux in unsaturated soil, lateral flux for each interface [mm h2o/s]
+    real(r8) :: qflx_lateral_aquifer(bounds%begc:bounds%endc)
 
     !-----------------------------------------------------------------------
 
@@ -367,6 +369,7 @@ contains
          fracice           =>    soilhydrology_vars%fracice_col     , & ! Input:  [real(r8) (:,:) ]  fractional impermeability (-)
          icefrac           =>    soilhydrology_vars%icefrac_col     , & ! Input:  [real(r8) (:,:) ]  fraction of ice
          hkdepth           =>    soilhydrology_vars%hkdepth_col     , & ! Input:  [real(r8) (:)   ]  decay factor (m)
+         h3d_zwt_lun       =>    soilhydrology_vars%h3d_zwt_lun        , & ! Output: [real(r8) (:,:) ] water table depth at h3d column !yhfang
 
          smpmin            =>    soilstate_vars%smpmin_col          , & ! Input:  [real(r8) (:)   ]  restriction for min of soil potential (mm)
          watsat            =>    soilstate_vars%watsat_col          , & ! Input:  [real(r8) (:,:) ]  volumetric soil water at saturation (porosity)
@@ -387,7 +390,7 @@ contains
          qflx_rootsoi_col  =>    col_wf%qflx_rootsoi    , & ! Input: [real(r8) (:,:) ]  vegetation/soil water exchange (mm H2O/s) (+ = to atm)
          qflx_lateral_col  =>    col_wf%qflx_lateral    , & ! Input: [real(r8) (:,:) ]  lateral subsurface flow
          qflx_lat_layer    =>    col_wf%qflx_lat_layer    , & ! Input: [real(r8) (:,:) ]  lateral subsurface flow
-
+         
          t_soisno          =>    col_es%t_soisno        & ! Input:  [real(r8) (:,:) ]  soil temperature (Kelvin)
          )
 
@@ -585,6 +588,17 @@ contains
          else
             dzmm(c,nlevbed+1) = (1.e3_r8*zwt(c) - zmm(c,nlevbed))
          end if
+      end do
+      
+
+      ! Compute lateral flux
+      if(use_h3d .and. (.not.zengdecker_2009_with_var_soil_thick)) &
+      call ComputeLateralUnsatFlux(bounds, num_hydrologyc, filter_hydrologyc, &
+           num_urbanc, filter_urbanc, num_h3dc, filter_h3dc, soilhydrology_vars, soilstate_vars, jwt, qflx_lateral_s)
+      !qflx_lateral_s(:,:) = 0.0 !debug      
+      do fc = 1, num_hydrologyc
+         c = filter_hydrologyc(fc)
+         nlevbed = nlev2bed(c)
          qflx_lateral_col(c) = 0.0_r8
          if(use_h3d) then
           do j = 1, nlevbed
@@ -594,22 +608,6 @@ contains
          else
              qflx_lateral_s(c,:) = 0.0_r8
          endif
-      end do
-      
-
-      ! Compute lateral flux
-      if(use_h3d .and. (.not.zengdecker_2009_with_var_soil_thick)) &
-      call ComputeLateralUnsatFlux(bounds, num_hydrologyc, filter_hydrologyc, &
-           num_urbanc, filter_urbanc, num_h3dc, filter_h3dc, soilhydrology_vars, soilstate_vars, jwt, qflx_lateral_s)
-      
-      do fc = 1, num_hydrologyc
-         c = filter_hydrologyc(fc)
-         nlevbed = nlev2bed(c)
-         qflx_lateral_col(c) = 0.0_r8
-         do j = 1, nlevbed
-             qflx_lateral_col(c) = qflx_lateral_col(c) + qflx_lateral_s(c,j)
-             qflx_lat_layer(c,j) = qflx_lateral_s(c,j)
-         end do
       end do
 
       ! Set up r, a, b, and c vectors for tridiagonal solution
@@ -738,7 +736,7 @@ contains
                bmx(c,j+1) = dzmm(c,j+1)/dtime
                cmx(c,j+1) = 0._r8
             else
-               rmx(c,j+1) =  qin(c,j+1) - qout(c,j+1)
+               rmx(c,j+1) =  qin(c,j+1) - qout(c,j+1) !+ qflx_lateral_s(c,j+1)
                amx(c,j+1) = -dqidw0(c,j+1)
                bmx(c,j+1) =  dzmm(c,j+1)/dtime - dqidw1(c,j+1) + dqodw1(c,j+1)
                cmx(c,j+1) =  0._r8
@@ -864,10 +862,18 @@ contains
             endif
          endif
       end do
+!
+      ! NOTE: The H3D saturated lateral-flow step (SolveLateralSatFlow) and its
+      ! qflx_lateral / h3d_zwt_lun bookkeeping were MOVED to HydrologyDrainage
+      ! (after Drainage, before endwb is captured). Reason: SolveLateralSatFlow
+      ! moves the water table (zwt/jwt); running it here -- between the point
+      ! where qcharge(c) is computed (this routine) and where it is applied in
+      ! WaterTable with a branch on jwt -- caused qcharge to be applied on the
+      ! wrong side of the nlevbed boundary once lateral moved jwt across it,
+      ! yielding a cumulative, transmissivity-scaled water-balance error. Moving
+      ! the lateral step after qcharge/Drainage removes that interleaving.
+      ! (See tmp/lateral_satflow_balance_findings.txt.)
 
-      if(use_h3d .and. (.not.zengdecker_2009_with_var_soil_thick))  &
-      call SolveLateralSatFlow(bounds, num_hydrologyc, filter_hydrologyc, &
-           num_urbanc, filter_urbanc, num_h3dc, filter_h3dc, soilhydrology_vars, soilstate_vars, jwt)
 
       ! compute the water deficit and reset negative liquid water content
       !  Jinyun Tang
