@@ -184,7 +184,12 @@ contains
 
                hkl = impedl*s1*s2*10.0_r8
                theta = hs_slope(c)/180._r8*rpi
-               qflx_up_to_dn = -(hkl*(smp_dn - smp_up)*cos(theta)/den + hkl*(sin(theta))) 
+               ! Unsaturated Darcy flux from the UP (upslope/top) column to
+               ! the DN (downslope/valley) column.  Head = matric potential
+               ! (smp) + elevation.  BOTH the diffusion term (smp_up - smp_dn)
+               ! and the gravity term (+sin(theta)) must drive water DOWNSLOPE
+               ! (top -> valley); the previous gravity sign drove it upslope.
+               qflx_up_to_dn = hkl*(smp_up - smp_dn)*cos(theta)/den + hkl*(sin(theta))
 
                qflx_lateral_s(col_id_up,j) = qflx_lateral_s(col_id_up,j) - qflx_up_to_dn &
                           * dz(col_id_up,j)/hs_dx(l,k+1)*cos(theta)
@@ -376,7 +381,16 @@ contains
 
             ! calculate transmissivity
             trans = impedl*sqrt(hksat_up*hksat_dn)*(depth_up+depth_down)/2._r8*1000._r8 !* 0.01 ! (mm2/s)
-            qflx_up_to_dn = -trans*((depth_down-depth_up)*1000._r8/den*cos(theta) + sin(theta))
+            ! Darcy flux from the UP (upslope/top) column to the DN
+            ! (downslope/valley) column, with x increasing upslope and
+            ! hydraulic head = bed elevation + saturated thickness
+            ! (depth = zi_bed - zwt).  BOTH the diffusion term
+            ! (depth_up - depth_down) and the gravity term (+sin(theta))
+            ! must drive water DOWNSLOPE (top -> valley).  The previous
+            ! form had the gravity term with the wrong sign, so on any
+            ! real slope it pumped groundwater UPslope (valley -> top),
+            ! deepening the valley water table and raising the top.
+            qflx_up_to_dn = trans*((depth_up-depth_down)*1000._r8/den*cos(theta) + sin(theta))
 
             ! qflx_up_to_dn is an integrated saturated flow per unit width [mm2/s].
             ! Convert it back to an areal flux [mm/s] by dividing by the H3D
