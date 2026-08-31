@@ -186,7 +186,7 @@ contains
 
                hkl = impedl*s1*s2*10.0_r8
                theta = hs_slope(c)/180._r8*rpi
-               qflx_up_to_dn = -(hkl*(smp_dn - smp_up)*cos(theta)/den + hkl*(sin(theta))) 
+               qflx_up_to_dn = -(hkl*(smp_dn - smp_up)*cos(theta)/den - hkl*(sin(theta))) 
 
                qflx_lateral_s(col_id_up,j) = qflx_lateral_s(col_id_up,j) - qflx_up_to_dn &
                           * dz(col_id_up,j)/hs_dx(l,k+1)*cos(theta)
@@ -391,7 +391,8 @@ contains
            if (use_var_soil_thick) then
               zwtbed(c) = zibed(c)
            else
-              zwtbed(c) = 25._r8 + zibed(c)
+              !zwtbed(c) = 25._r8 + zibed(c)
+              zwtbed(c) = zi(c,nlevgrnd)
            end if
            h_sat_begin(k) = zwtbed(c) - zwt(c)
            h_sat_old(k)   = h_sat_begin(k)
@@ -429,8 +430,25 @@ contains
         end do
 
         ! Net saturated-storage change over the ELM step -> lateral flux [mm/s].
+        !
         ! f_drain holds the drainable porosity (specific yield) at the final
-        ! saturated-zone state, matching the H3D_DRI storage-change accounting.
+        ! saturated-zone state, matching the H3D_DRI storage-change accounting
+        ! (SoilHydrologyMod: hs_dS_sat = f_drain*(h_sat - h_sat_begin);
+        !  qflx = hs_dS_sat/dtime*1000).
+        !
+        ! IMPORTANT (sign / units): h_sat (= zwtbed - zwt) is a VERTICAL
+        ! saturated-zone thickness and the hillslope areas (hs_dA) and distances
+        ! (hs_dx) are horizontal.  Therefore f_drain*(h_sat - h_sat_begin) is a
+        ! water depth per unit HORIZONTAL ground area already -- exactly the basis
+        ! the ELM column water balance uses -- so NO cos(theta) projection is
+        ! applied here (the reference H3D_DRI likewise applies none).
+        !
+        ! This also keeps the water table consistent: in the storage-update block
+        ! below the analytical specific yield (rous/s_y) equals f_drain, so the
+        ! (unclipped) table update is dzwt = -qlat/(s_y*1000) = -(h_sat-h_sat_begin),
+        ! i.e. zwt -> zwtbed - h_sat, matching the implicit solution.  Multiplying
+        ! the flux by cos(theta) would scale that table move by cos(theta) and give
+        ! a wrong zwt on sloped columns.
         do k = 1, nh3dc_per_lunit
            c = c0+k-1
            qflx_lateral_s(c) = f_drain(c) * (h_sat_old(k) - h_sat_begin(k))     &
@@ -955,7 +973,7 @@ enddo
          sucsat           =>    soilstate_vars%sucsat_col                     &
              )
 
-    f_aniso   = 100._r8
+    f_aniso   = 1.0_r8
     niter     = 0
     iter_conv = .false.
 
@@ -985,15 +1003,35 @@ enddo
         w_kl_h(k) = f_aniso*hs_w_nod(l,k)*hksat(c,idx)*h_sat_prev(k) / 1000._r8
       end do
 
+      ! ------------------------------------------------------------------
+      ! Node 1 = valley / hillslope toe.  NO-FLUX (closed) outlet boundary.
+      !
+      ! The reference H3D LateralResponse imposes a fixed-head = 0 seepage
+      ! boundary here (a Darcy discharge to the stream, the explicit
+      ! "- cos/hs_dx * w * f_aniso * hk/1000 * h_sat_prev(1)**2" term).  That is a
+      ! DRAINAGE flux to the channel and it (a) requires a stream head that ELM
+      ! does not carry (assuming 0 is arbitrary and can only ever drain, never
+      ! let the stream support the valley table), (b) makes SolveLateralSatFlow
+      ! non-conservative so its qflx_lateral no longer sums to zero over the
+      ! hillslope, and (c) drains the valley column every step -> inverted water
+      ! table (valley dry / hilltop wet).
+      !
+      ! For an inter-column LATERAL redistribution flux the toe must be no-flux,
+      ! exactly like the hilltop divide (node N).  Land->river baseflow is left
+      ! to ELM's existing qflx_drain / rsub_top parameterization, which does not
+      ! need an explicit stream stage.  With this change node 1 couples ONLY to
+      ! its upslope neighbor (node 2): the lower-face conductance (amx) and the
+      ! lower-face gravity flux (the -w_kl_h(k) piece) are dropped, and the
+      ! zero-head seepage term is removed.  This restores Sum_col
+      ! f_drain*(h_sat-h_sat_begin) = 0 (verified in tmp/lateral_outlet_test.py).
+      ! ------------------------------------------------------------------
       k = 1
       c = c0+k-1
       amx(k) = 0._r8
       cmx(k) = -1._r8 * w_kl_h(k+1) * cos(hs_slope(c)/180._r8*rpi) * dt_h3d / (hs_dx_nod(l,k+1) * hs_dx(l,k) * hs_w_nod(l,k))
       bmx(k) = f_drain(c) - (amx(k) + cmx(k))
-      idx1 = min(jwt(k)+1,nlev2bed(c))
-      rmx(k) = f_drain(c) * h_sat_old(k) + dt_h3d / (hs_w_nod(l,k)*hs_dx(l,k)) * &
-               (sin(hs_slope(c)/180._r8*rpi) * w_kl_h(k+1) - cos(hs_slope(c)/180._r8*rpi) / hs_dx(l,k) * hs_w_nod(l,k) * &
-               f_aniso * hksat(c,idx1) / 1000._r8 * (h_sat_prev(k))**2)
+      rmx(k) = f_drain(c) * h_sat_old(k) + dt_h3d * sin(hs_slope(c)/180._r8*rpi) / &
+               (hs_w_nod(l,k)*hs_dx(l,k)) * (w_kl_h(k+1))
 
 
       do k=2,nh3dc_per_lunit - 1
