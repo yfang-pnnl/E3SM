@@ -40,7 +40,7 @@ contains
     !
     ! !USES
     use elm_varpar  , only : natpft_size, cft_size, maxpatch_urb, maxpatch_glcmec
-    use elm_varctl  , only : create_crop_landunit, use_polygonal_tundra
+    use elm_varctl  , only : create_crop_landunit, use_polygonal_tundra, use_fates
     use elm_varsur  , only : wt_lunit, urban_valid, wt_glc_mec
     use landunit_varcon  , only : istsoil, istcrop, istice, istice_mec, istdlak, istwet, &
                              isturb_tbd, isturb_hd, isturb_md
@@ -149,13 +149,22 @@ contains
        ! -------------------------------------------------------------------------
        ! Number of cohorts is set here
        ! ED cohorts (via FATES) populate all natural vegetation columns.
-       ! Current implementations mostly assume that only one column contains
-       ! natural vegetation, which is synonymous with the soil column. 
-       ! Because of the single natural vegetation paradigm currently in place,
-       ! fates cohort allocations are based off a multiplier on grid-cells.
+       ! Each topographic unit carries its own naturally vegetated column (see
+       ! just above), and each of those columns is an independent FATES site.
+       ! The cohort/patch dimension is the striding space used by the FATES
+       ! restart interface, so space must be ACCUMULATED over topounits.  If it
+       ! were merely assigned (as was done previously), every FATES site within a
+       ! gridcell would be handed the same block of restart slots, and the sites
+       ! would overwrite each other on write and read back garbage on restart.
        ! -------------------------------------------------------------------------
 
-       icohorts = fates_maxElementsPerSite
+       if (use_fates) then
+          icohorts = icohorts + fates_maxElementsPerSite
+       else
+          ! Preserve the historical (single slot per gridcell) dimensioning when
+          ! FATES is off, where fates_maxElementsPerSite is simply 1.
+          icohorts = fates_maxElementsPerSite
+       end if
 
        if (present(nveg)) nveg = nveg + npfts_per_lunit
 
@@ -420,10 +429,10 @@ contains
     ! -------------------------------------------------------------------------
     ! Number of cohorts is set here
     ! ED cohorts (via FATES) populate all natural vegetation columns.
-    ! Current implementations mostly assume that only one column contains
-    ! natural vegetation, which is synonymous with the soil column. 
-    ! Because of the single natural vegetation paradigm currently in place,
-    ! fates cohort allocations are based off a multiplier on grid-cells.
+    ! This routine reports quantities for a SINGLE topounit, and each topounit
+    ! holds exactly one naturally vegetated column, which is one FATES site.
+    ! Therefore one site's worth of cohort/patch restart space is correct here.
+    ! (Contrast with subgrid_get_gcellinfo above, which sums over topounits.)
     ! -------------------------------------------------------------------------
 
     icohorts = fates_maxElementsPerSite

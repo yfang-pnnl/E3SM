@@ -1561,13 +1561,25 @@ contains
 
     if ( use_fates ) then
        ! ED cohort gsMap
+       !
+       ! Each gridcell owns coCount(gi) cohort slots, which is
+       ! (number of topounits) * fates_maxElementsPerSite -- i.e. one block of
+       ! fates_maxElementsPerSite slots for every FATES site (naturally
+       ! vegetated column) in the gridcell.  Advance to the next gridcell only
+       ! after its entire block has been consumed.  Note this must NOT be based
+       ! on mod(coi,fates_maxElementsPerSite), which silently assumes exactly
+       ! one FATES site per gridcell and mis-maps every multi-topounit
+       ! (e.g. hillslope) configuration.
        allocate(gindex(begCohort:endCohort))
        ioff(:) = 0
        gi = begg
        do coi = begCohort,endCohort
+          ! Skip over any gridcells that own no cohort space at all
+          do while ( gi < endg .and. coCount(gi) <= ioff(gi) )
+             gi = gi + 1
+          enddo
           gindex(coi) = coStart(gi) + ioff(gi)
           ioff(gi) = ioff(gi) + 1
-          if ( mod(coi, fates_maxElementsPerSite ) == 0 ) gi = gi + 1
        enddo
        locsize = endCohort-begCohort+1
        globsize = numCohort
