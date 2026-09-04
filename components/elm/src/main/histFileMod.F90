@@ -3232,7 +3232,7 @@ contains
        do topo= bounds%begt,bounds%endt
          itarr(topo) = mod(ldecomp%gdc2glo(top_pp%gridcell(topo))-1,ldomain%ni) + 1
        enddo
-       call ncd_io(varname='ltopo1d_ixy', data=itarr, dim1name=namet, ncid=ncid, flag='write')
+       call ncd_io(varname='topo1d_ixy', data=itarr, dim1name=namet, ncid=ncid, flag='write')
        do topo = bounds%begt,bounds%endt
          itarr(topo) = (ldecomp%gdc2glo(top_pp%gridcell(topo))-1)/ldomain%ni + 1
        enddo
