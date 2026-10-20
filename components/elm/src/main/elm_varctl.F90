@@ -598,7 +598,7 @@ module elm_varctl
    !----------------------------------------------------------
    ! Modified infiltration scheme in surface water storage
    !----------------------------------------------------------
-   logical, public :: use_modified_infil = .false.
+   logical, public :: use_modified_infil = .true.
 
 contains
 

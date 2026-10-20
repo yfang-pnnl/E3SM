@@ -345,6 +345,7 @@ contains
     real(r8) :: zwtmm(bounds%begc:bounds%endc)               ! water table depth [mm]
     real(r8) :: imped(bounds%begc:bounds%endc,1:nlevgrnd)
     real(r8) :: vol_ice(bounds%begc:bounds%endc,1:nlevgrnd)
+    real(r8) :: theta_eff(bounds%begc:bounds%endc,1:nlevgrnd)   ! effective porosity = watsat - vol_ice (m3/m3), UA (U of Arizona) approach
     real(r8) :: z_mid
     real(r8) :: vwc_zwt(bounds%begc:bounds%endc)
     real(r8) :: vwc_liq(bounds%begc:bounds%endc,1:nlevgrnd+1) ! liquid volumetric water content
@@ -410,6 +411,9 @@ contains
             vol_ice(c,j) = min(watsat(c,j), h2osoi_ice(c,j)/(dz(c,j)*denice))
             icefrac(c,j) = min(1._r8,vol_ice(c,j)/watsat(c,j))
             vwc_liq(c,j) = max(h2osoi_liq(c,j),1.0e-6_r8)/(dz(c,j)*denh2o)
+            ! effective porosity (UA): ice is excluded from the pore space used by the
+            ! hydraulic relationships, theta_eff = theta_sat - theta_ice
+            theta_eff(c,j) = max(watsat(c,j) - vol_ice(c,j), 1.0e-6_r8)
          end do
       end do
 
@@ -525,8 +529,9 @@ contains
                s1 = 0.5_r8*(h2osoi_vol(c,j) + h2osoi_vol(c,min(nlevsoi, j+1))) / &
                     (0.5_r8*(watsat(c,j)+watsat(c,min(nlevsoi, j+1))))
             else
+               ! UA: relative saturation uses effective porosity (theta_eff) instead of theta_sat
                s1 = 0.5_r8*(vwc_liq(c,j) + vwc_liq(c,min(nlevsoi, j+1))) / &
-                    (0.5_r8*(watsat(c,j)+watsat(c,min(nlevsoi, j+1))))
+                    (0.5_r8*(theta_eff(c,j)+theta_eff(c,min(nlevsoi, j+1))))
             endif
             s1 = min(1._r8, s1)
             s2 = hksat(c,j)*s1**(2._r8*bsw(c,j)+2._r8)
@@ -535,11 +540,26 @@ contains
             if (origflag == 1) then
                imped(c,j)=(1._r8-0.5_r8*(fracice(c,j)+fracice(c,min(nlevsoi, j+1))))
             else
+               ! UA: Omega = 0 (e_ice = 0), so the ice impedance factor is 1
                imped(c,j)=10._r8**(-e_ice*(0.5_r8*(icefrac(c,j)+icefrac(c,min(nlevsoi, j+1)))))
             endif
             hk(c,j) = imped(c,j)*s1*s2
-            dhkdw(c,j) = imped(c,j)*(2._r8*bsw(c,j)+3._r8)*s2* &
-                 (1._r8/(watsat(c,j)+watsat(c,min(nlevsoi, j+1))))
+            if (origflag == 1) then
+               dhkdw(c,j) = imped(c,j)*(2._r8*bsw(c,j)+3._r8)*s2* &
+                    (1._r8/(watsat(c,j)+watsat(c,min(nlevsoi, j+1))))
+            else
+               ! UA: d(hk)/d(theta_liq) of M6, with theta_eff held fixed over the step:
+               !   hk = imped*hksat*s1**(2b+3),  s1 = (theta_liq,j+theta_liq,j+1)/(theta_eff,j+theta_eff,j+1)
+               !   d(hk)/d(theta_liq) = imped*(2b+3)*hksat*s1**(2b+2) / (theta_eff,j+theta_eff,j+1)
+               ! When s1 is capped at 1 (theta_liq >= theta_eff), hk no longer depends on
+               ! theta_liq, so the derivative is zero (consistent Jacobian).
+               if (s1 >= 1._r8) then
+                  dhkdw(c,j) = 0._r8
+               else
+                  dhkdw(c,j) = imped(c,j)*(2._r8*bsw(c,j)+3._r8)*s2* &
+                       (1._r8/(theta_eff(c,j)+theta_eff(c,min(nlevsoi, j+1))))
+               endif
+            endif
 
             !compute un-restricted hydraulic conductivity
             !call soil_water_retention_curve%soil_hk(hksat(c,j), imped(c,j), s1, bsw(c,j), hktmp, dhkds)
@@ -555,7 +575,8 @@ contains
             if (origflag == 1) then
                s_node = max(h2osoi_vol(c,j)/watsat(c,j), 0.01_r8)
             else
-               s_node = max(vwc_liq(c,j)/watsat(c,j), 0.01_r8)
+               ! UA: matric potential uses theta_liq/theta_eff (M7)
+               s_node = max(vwc_liq(c,j)/theta_eff(c,j), 0.01_r8)
             endif
             s_node = min(1.0_r8, s_node)
 
@@ -569,7 +590,11 @@ contains
             if (origflag == 1) then
                dsmpdw(c,j) = -bsw(c,j)*smp(c,j)/(s_node*watsat(c,j))
             else
-               dsmpdw(c,j) = -bsw(c,j)*smp(c,j)/vwc_liq(c,j)
+               ! UA: d(psi)/d(theta_liq) of M7, psi = -sucsat*(theta_liq/theta_eff)**(-b):
+               !   d(psi)/d(theta_liq) = -b*psi/(s_node*theta_eff)
+               ! (equal to -b*psi/theta_liq when s_node is not clamped; evaluated on the
+               ! clamped s_node so it stays consistent with psi when s_node hits 0.01 or 1)
+               dsmpdw(c,j) = -bsw(c,j)*smp(c,j)/(s_node*theta_eff(c,j))
             endif
 
             smp_l(c,j) = smp(c,j)
@@ -686,7 +711,8 @@ contains
             if(origflag == 1) then
                s_node = max(0.5*(1.0_r8+h2osoi_vol(c,j)/watsat(c,j)), 0.01_r8)
             else
-               s_node = max(0.5*((vwc_zwt(c)+vwc_liq(c,j))/watsat(c,j)), 0.01_r8)
+               ! UA: use effective porosity of the bottom soil layer (M7)
+               s_node = max(0.5*((vwc_zwt(c)+vwc_liq(c,j))/theta_eff(c,j)), 0.01_r8)
             endif
             s_node = min(1.0_r8, s_node)
 
@@ -697,7 +723,12 @@ contains
 
             ! compute dsmpdw for aquifer layer
             !dsmpdw1 = dsmpds/watsat(c,j)
-            dsmpdw1 = -bsw(c,j)*smp1/(s_node*watsat(c,j))
+            if(origflag == 1) then
+               dsmpdw1 = -bsw(c,j)*smp1/(s_node*watsat(c,j))
+            else
+               ! UA: derivative consistent with theta_eff-based s_node above
+               dsmpdw1 = -bsw(c,j)*smp1/(s_node*theta_eff(c,j))
+            endif
 
             ! first set up bottom layer of soil column
             den    = (zmm(c,j) - zmm(c,j-1))

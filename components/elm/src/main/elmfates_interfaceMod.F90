@@ -1752,6 +1752,7 @@ contains
      use FatesIOVariableKindMod, only : site_r8, site_int, cohort_r8, cohort_int
      use EDMainMod, only :        ed_update_site
      use FatesInterfaceTypesMod, only:  fates_maxElementsPerSite
+     use topounit_varcon,        only : has_topounit
 
       implicit none
 
@@ -1774,6 +1775,7 @@ contains
       integer                 :: c   ! HLM column index
       integer                 :: s   ! Fates site index
       integer                 :: g   ! HLM grid index
+      integer                 :: t   ! HLM topounit index
       integer                 :: p   ! HLM patch index
       integer                 :: ft  ! plant functional type
       integer                 :: dk_index
@@ -1834,7 +1836,7 @@ contains
          end do
          !$OMP END PARALLEL DO
 
-         !$OMP PARALLEL DO PRIVATE (nc,s,c,g)
+         !$OMP PARALLEL DO PRIVATE (nc,s,c,g,t)
          do nc = 1,nclumps
 
             allocate(this%fates_restart%restart_map(nc)%site_index(this%fates(nc)%nsites))
@@ -1843,7 +1845,35 @@ contains
                c = this%f2hmap(nc)%fcolumn(s)
                this%fates_restart%restart_map(nc)%site_index(s)   = c
                g = col_pp%gridcell(c)
-               this%fates_restart%restart_map(nc)%cohort1_index(s) = (g-1)*fates_maxElementsPerSite + 1
+
+               ! ---------------------------------------------------------------
+               ! Each FATES site needs its OWN private block of
+               ! fates_maxElementsPerSite slots in the cohort-dimensioned
+               ! restart vectors.  A FATES site is the naturally vegetated
+               ! column of a topounit, so a gridcell holds as many sites as it
+               ! has topounits.  The offset therefore has to account for the
+               ! position of this site's topounit within its gridcell.
+               !
+               ! Previously this was simply (g-1)*fates_maxElementsPerSite+1,
+               ! which handed every site in a gridcell the SAME block.  With
+               ! more than one topounit per gridcell (e.g. hillslope configs)
+               ! the sites overwrote each other when writing restarts and read
+               ! back a mixture of another site's state and never-written
+               ! memory, which then tripped the FATES mass balance check on the
+               ! first step after a restart.
+               ! ---------------------------------------------------------------
+               ! The topounit index is already globally unique and ordered
+               ! consistently with the cohort dimension (which is now sized as
+               ! ntopounits*fates_maxElementsPerSite), so it can be used
+               ! directly as the block number for this site.
+               if (has_topounit) then
+                  t = col_pp%topounit(c)
+               else
+                  t = g
+               end if
+
+               this%fates_restart%restart_map(nc)%cohort1_index(s) = &
+                    (t - 1)*fates_maxElementsPerSite + 1
             end do
 
          end do
