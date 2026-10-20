@@ -548,7 +548,7 @@ contains
                dhkdw(c,j) = imped(c,j)*(2._r8*bsw(c,j)+3._r8)*s2* &
                     (1._r8/(watsat(c,j)+watsat(c,min(nlevsoi, j+1))))
             else
-               ! UA: d(hk)/d(theta_liq) of M6, with theta_eff held fixed over the step:
+               ! UA: d(hk)/d(theta_liq), with theta_eff held fixed over the step:
                !   hk = imped*hksat*s1**(2b+3),  s1 = (theta_liq,j+theta_liq,j+1)/(theta_eff,j+theta_eff,j+1)
                !   d(hk)/d(theta_liq) = imped*(2b+3)*hksat*s1**(2b+2) / (theta_eff,j+theta_eff,j+1)
                ! When s1 is capped at 1 (theta_liq >= theta_eff), hk no longer depends on
@@ -575,7 +575,7 @@ contains
             if (origflag == 1) then
                s_node = max(h2osoi_vol(c,j)/watsat(c,j), 0.01_r8)
             else
-               ! UA: matric potential uses theta_liq/theta_eff (M7)
+               ! UA: matric potential uses theta_liq/theta_eff 
                s_node = max(vwc_liq(c,j)/theta_eff(c,j), 0.01_r8)
             endif
             s_node = min(1.0_r8, s_node)
@@ -590,7 +590,7 @@ contains
             if (origflag == 1) then
                dsmpdw(c,j) = -bsw(c,j)*smp(c,j)/(s_node*watsat(c,j))
             else
-               ! UA: d(psi)/d(theta_liq) of M7, psi = -sucsat*(theta_liq/theta_eff)**(-b):
+               ! UA: d(psi)/d(theta_liq) , psi = -sucsat*(theta_liq/theta_eff)**(-b):
                !   d(psi)/d(theta_liq) = -b*psi/(s_node*theta_eff)
                ! (equal to -b*psi/theta_liq when s_node is not clamped; evaluated on the
                ! clamped s_node so it stays consistent with psi when s_node hits 0.01 or 1)
@@ -711,7 +711,7 @@ contains
             if(origflag == 1) then
                s_node = max(0.5*(1.0_r8+h2osoi_vol(c,j)/watsat(c,j)), 0.01_r8)
             else
-               ! UA: use effective porosity of the bottom soil layer (M7)
+               ! UA: use effective porosity of the bottom soil layer 
                s_node = max(0.5*((vwc_zwt(c)+vwc_liq(c,j))/theta_eff(c,j)), 0.01_r8)
             endif
             s_node = min(1.0_r8, s_node)
