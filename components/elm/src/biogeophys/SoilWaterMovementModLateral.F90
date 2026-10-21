@@ -254,6 +254,8 @@ contains
     real(r8) :: dtime, qlat_layer, qlat_tot, qlat_temp, s_y, h2osoi_left_vol, h2osoi_avail, qlat_from_wa
     real(r8) :: rous, sy, trans, theta, storage_before, storage_after,wa_left_vol, wa_excess
     ! Locals for the implicit H3D lateral saturated-zone solver (LateralResponse)
+    real(r8) :: dS_lat     (nh3dc_per_lunit)  ! accumulated sum_sub f_drain*(h_new-h_old) [m water]
+    real(r8) :: dS_lat_net                    ! hillslope area-weighted sum of dS_lat [m3]
     real(r8) :: h_sat_begin(nh3dc_per_lunit)  ! saturated-zone level at start of ELM step [m]
     real(r8) :: h_sat_old  (nh3dc_per_lunit)  ! saturated-zone level at previous sub-step  [m]
     real(r8) :: h_sat      (nh3dc_per_lunit)  ! saturated-zone level at current  sub-step  [m]
@@ -396,6 +398,7 @@ contains
            end if
            h_sat_begin(k) = zwtbed(c) - zwt(c)
            h_sat_old(k)   = h_sat_begin(k)
+           dS_lat(k)      = 0._r8
         end do
 
         ! Adaptive sub-time-stepping of the implicit lateral solve.
@@ -417,8 +420,15 @@ contains
                 h_sat_old(1:nh3dc_per_lunit), h_sat(1:nh3dc_per_lunit), iter_conv)
 
            if (iter_conv) then
+              ! Accumulate the saturated-storage change of THIS sub-step with
+              ! the f_drain the sub-step was solved with.  LateralResponse is
+              ! conservative per sub-step only in f_drain_sub*(h_new-h_old);
+              ! using the final f_drain for the whole ELM step (previous code)
+              ! leaks mass whenever more than one sub-step is taken.
               do k = 1, nh3dc_per_lunit
+                 c = c0+k-1
                  h_sat(k)     = max(0._r8, h_sat(k))
+                 dS_lat(k)    = dS_lat(k) + f_drain(c) * (h_sat(k) - h_sat_old(k))
                  h_sat_old(k) = h_sat(k)
               end do
            else
@@ -451,9 +461,21 @@ contains
         ! a wrong zwt on sloped columns.
         do k = 1, nh3dc_per_lunit
            c = c0+k-1
-           qflx_lateral_s(c) = f_drain(c) * (h_sat_old(k) - h_sat_begin(k))     &
-                * 1000._r8 / dtime
+           qflx_lateral_s(c) = dS_lat(k) * 1000._r8 / dtime
         end do
+
+        ! Hillslope conservation check: the area-weighted lateral exchange
+        ! must sum to zero (closed toe and divide).  Non-zero means the
+        ! discretisation creates/destroys water (each column would still pass
+        ! BalanceCheck, but the gridcell would not close).
+        dS_lat_net = 0._r8
+        do k = 1, nh3dc_per_lunit
+           dS_lat_net = dS_lat_net + dS_lat(k) * lun_pp%hs_dA(l,k)
+        end do
+        if (abs(dS_lat_net) / lun_pp%hs_area(l) > 1.e-9_r8) then
+           write(iulog,*) 'H3D lateral non-conservation [m]: ', &
+                dS_lat_net / lun_pp%hs_area(l), ' landunit ', l
+        end if
       enddo
 
          ! IMPORTANT: iterate over exactly the H3D columns whose saturated
@@ -952,6 +974,9 @@ enddo
     integer  :: idx
     real(r8) :: f_aniso                                       ! factor to scale hk
     real(r8) :: idx1                                          ! water table layer at the bottom of the column
+    real(r8) :: sin_itf(1:nh3dc_per_lunit)                    ! sin of slope at interface k-1/2 (between node k-1 and k), k=2..N
+    real(r8) :: cos_itf(1:nh3dc_per_lunit)                    ! cos of slope at interface k-1/2
+    real(r8) :: tan_dn, tan_up                                ! column slopes (m/m) on either side of an interface
     !-----------------------------------------------------------------------
 
     associate(                                                                &
@@ -978,6 +1003,24 @@ enddo
     iter_conv = .false.
 
     h_sat_prev(:) = h_sat_old(:)
+
+    ! ------------------------------------------------------------------
+    ! Interface slopes.  The flux across interface k-1/2 enters row k-1
+    ! (as inflow) and row k (as outflow).  Both rows MUST use the same
+    ! slope; previously each row used its own column slope, so with a
+    ! slope that varies along the hillslope (hillslope_slope on surfdata)
+    ! sum_k hs_dA(k)*f_drain(k)*dh(k) /= 0 and the solve created/destroyed
+    ! water (~ -100 mm/yr regionally for the CA domain).  The interface
+    ! slope is the mean gradient of the two adjoining columns.
+    ! ------------------------------------------------------------------
+    sin_itf(1) = 0._r8
+    cos_itf(1) = 1._r8
+    do k = 2, nh3dc_per_lunit
+       tan_dn = tan(hs_slope(c0+k-2)/180._r8*rpi)
+       tan_up = tan(hs_slope(c0+k-1)/180._r8*rpi)
+       sin_itf(k) = sin(atan(0.5_r8*(tan_dn + tan_up)))
+       cos_itf(k) = cos(atan(0.5_r8*(tan_dn + tan_up)))
+    end do
 
     do while ((.not. iter_conv) .and. (niter < niter_max))
 
@@ -1025,32 +1068,36 @@ enddo
       ! zero-head seepage term is removed.  This restores Sum_col
       ! f_drain*(h_sat-h_sat_begin) = 0 (verified in tmp/lateral_outlet_test.py).
       ! ------------------------------------------------------------------
+      ! Interface k-1/2 (k=2..N) carries transmissivity w_kl_h(k) and slope
+      ! sin_itf(k)/cos_itf(k); it is added to row k-1 and subtracted from
+      ! row k with the SAME coefficients (divided by each column's area
+      ! hs_w_nod*hs_dx = hs_dA), so the system is conservative.
       k = 1
       c = c0+k-1
       amx(k) = 0._r8
-      cmx(k) = -1._r8 * w_kl_h(k+1) * cos(hs_slope(c)/180._r8*rpi) * dt_h3d / (hs_dx_nod(l,k+1) * hs_dx(l,k) * hs_w_nod(l,k))
+      cmx(k) = -1._r8 * w_kl_h(k+1) * cos_itf(k+1) * dt_h3d / (hs_dx_nod(l,k+1) * hs_dx(l,k) * hs_w_nod(l,k))
       bmx(k) = f_drain(c) - (amx(k) + cmx(k))
-      rmx(k) = f_drain(c) * h_sat_old(k) + dt_h3d * sin(hs_slope(c)/180._r8*rpi) / &
-               (hs_w_nod(l,k)*hs_dx(l,k)) * (w_kl_h(k+1))
+      rmx(k) = f_drain(c) * h_sat_old(k) + dt_h3d / (hs_w_nod(l,k)*hs_dx(l,k)) * &
+               (sin_itf(k+1) * w_kl_h(k+1))
 
 
       do k=2,nh3dc_per_lunit - 1
         c = c0+k-1
-        amx(k)  = -1._r8 * w_kl_h(k)   * cos(hs_slope(c)/180._r8*rpi) *dt_h3d / (hs_dx_nod(l,k)   * hs_dx(l,k) * hs_w_nod(l,k))
-        cmx(k)  = -1._r8 * w_kl_h(k+1) * cos(hs_slope(c)/180._r8*rpi) *dt_h3d / (hs_dx_nod(l,k+1) * hs_dx(l,k) * hs_w_nod(l,k))
+        amx(k)  = -1._r8 * w_kl_h(k)   * cos_itf(k)   *dt_h3d / (hs_dx_nod(l,k)   * hs_dx(l,k) * hs_w_nod(l,k))
+        cmx(k)  = -1._r8 * w_kl_h(k+1) * cos_itf(k+1) *dt_h3d / (hs_dx_nod(l,k+1) * hs_dx(l,k) * hs_w_nod(l,k))
         bmx(k)  = f_drain(c) - (amx(k) + cmx(k))
-        rmx(k)  = f_drain(c) * h_sat_old(k) + dt_h3d * sin(hs_slope(c)/180._r8*rpi) / &
-                  (hs_w_nod(l,k)*hs_dx(l,k)) * (w_kl_h(k+1) - w_kl_h(k))
+        rmx(k)  = f_drain(c) * h_sat_old(k) + dt_h3d / (hs_w_nod(l,k)*hs_dx(l,k)) * &
+                  (sin_itf(k+1) * w_kl_h(k+1) - sin_itf(k) * w_kl_h(k))
       end do
 
 
       k = nh3dc_per_lunit
       c = c0+k-1
-      amx(k) = -1._r8 * w_kl_h(k)   * cos(hs_slope(c)/180._r8*rpi) * dt_h3d / (hs_dx_nod(l,k) * hs_dx(l,k)    * hs_w_nod(l,k))
+      amx(k) = -1._r8 * w_kl_h(k)   * cos_itf(k) * dt_h3d / (hs_dx_nod(l,k) * hs_dx(l,k)    * hs_w_nod(l,k))
       cmx(k) = 0._r8
       bmx(k) = f_drain(c) - (amx(k) + cmx(k))
-      rmx(k) = f_drain(c) * h_sat_old(k) + dt_h3d * sin(hs_slope(c)/180._r8*rpi) / &
-               (hs_w_nod(l,k)*hs_dx(l,k)) * (- w_kl_h(k))
+      rmx(k) = f_drain(c) * h_sat_old(k) + dt_h3d / (hs_w_nod(l,k)*hs_dx(l,k)) * &
+               (- sin_itf(k) * w_kl_h(k))
 
       call Tridiagonal_h3D(nh3dc_per_lunit, amx, bmx, cmx, rmx, h_sat, ierror )
 
