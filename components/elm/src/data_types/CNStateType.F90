@@ -10,7 +10,8 @@ module CNStateType
   use elm_varcon     , only : spval, ispval, c14ratio, grlnd
   use landunit_varcon, only : istsoil, istcrop
   use elm_varpar     , only : nlevsno, nlevgrnd, nlevlak, crop_prog 
-  use elm_varctl     , only : use_vertsoilc, use_c14, use_cn 
+  use elm_varctl     , only : use_vertsoilc, use_c14, use_cn
+  use elm_varctl     , only : nlevsoi_user, nlevgrnd_user
   use elm_varctl     , only : iulog, fsurdat
   use LandunitType   , only : lun_pp                
   use ColumnType     , only : col_pp                
@@ -752,7 +753,12 @@ contains
 
     call ncd_inqdlen(ncid,dimid,nlevsoifl,name='nlevsoi')
     if ( .not. more_vertlayers )then
-       if ( nlevsoifl /= nlevsoi )then
+       ! With user-specified layers (nlevsoi_user / nlevgrnd_user) the surface file may
+       ! have a different number of soil layers (e.g. 15 on file, 30 in the model).
+       ! SoilStateType maps each model layer to the file layer containing its node depth;
+       ! model layers deeper than the file use the deepest file layer. No layered field
+       ! is read in this routine, so only the consistency check is relaxed here.
+       if ( nlevsoifl /= nlevsoi .and. nlevsoi_user <= 0 .and. nlevgrnd_user <= 0 )then
           call endrun(msg=' ERROR: Number of soil layers on file does NOT match the number being used'//&
                errMsg(__FILE__, __LINE__))
        end if

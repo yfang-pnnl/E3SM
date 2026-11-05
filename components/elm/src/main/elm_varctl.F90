@@ -475,6 +475,20 @@ module elm_varctl
   logical , public :: lateral_unsat_flow          = .true.   ! include lateral flow in the unsaturated zone
   real(r8), public :: lateral_hk_anisotropy       = 1._r8    ! ratio of horizontal to vertical hydraulic conductivity [-]
   logical , public :: lateral_theta_watertable    = .true.   ! diagnose the water table from soil moisture
+  logical , public :: lateral_deep_zwt            = .false.  ! cap zwt at the soil-column bottom instead of 80 m (deep columns)
+
+  !-----------------------------------------------------------------------
+  ! ASAP-style (Miguez-Macho and Fan) groundwater options; all off by default
+  !-----------------------------------------------------------------------
+  integer , public :: nlevgrnd_user          = -1          ! if > 0, number of ground layers (overrides the default nlevgrnd)
+  integer , public :: nlevsoi_user           = -1          ! if > 0, number of hydrologically active layers (overrides nlevsoi)
+  logical , public :: use_fdepth_decay       = .false.     ! decay hksat, watsat and sucsat below 1.5 m with the e-folding depth FDEPTH
+  character(len=16), public :: lateral_trans_method = 'elm' ! saturated lateral transmissivity: 'elm' or 'asap'
+  logical , public :: use_gw2river           = .false.     ! groundwater-river exchange (ASAP GW2RIVER) instead of SIMTOP drainage
+  real(r8), public :: gw2river_bed_thickness = 1._r8       ! river bed thickness used for the river-aquifer conductance [m]
+  real(r8), public :: gw2river_max_rate      = 50._r8/86400._r8 ! maximum groundwater-river exchange rate [mm/s]
+  logical , public :: use_zwt0_init          = .false.     ! cold start: water table from the surface-data field ZWT0 (with hydrostatic_init_zwt)
+  logical , public :: use_lnd_rof_gw_exchange = .false.    ! two-way groundwater-river exchange with MOSART (set from the driver flag lnd_rof_gw_exchange)
 
   !-----------------------------------------------------------------------
   ! Soil layer structure and cold-start soil water (used by idealized tests)

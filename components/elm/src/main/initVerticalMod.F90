@@ -19,7 +19,7 @@ module initVerticalMod
   use elm_varctl     , only : fsurdat, iulog, use_var_soil_thick
   use elm_varctl     , only : use_vancouver, use_mexicocity, use_vertsoilc, use_extralakelayers, use_extrasnowlayers
   use elm_varctl     , only : use_erosion, use_polygonal_tundra
-  use elm_varctl     , only : soil_layer_thickness
+  use elm_varctl     , only : soil_layer_thickness, nlevsoi_user, nlevgrnd_user
   use elm_varcon     , only : zlak, dzlak, zsoi, dzsoi, zisoi, dzsoi_decomp, spval, grlnd
   use column_varcon  , only : icol_roof, icol_sunwall, icol_shadewall, icol_road_perv, icol_road_imperv
   use landunit_varcon, only : istdlak, istice_mec
@@ -106,8 +106,23 @@ contains
 
     call ncd_inqdlen(ncid, dimid, nlevsoifl, name='nlevsoi')
 
-
-    if ( .not. more_vertlayers ) then
+    if (nlevsoi_user > 0 .or. nlevgrnd_user > 0) then
+       ! User-specified layer counts: keep nlevsoi/nlevgrnd from the namelist. Soil
+       ! texture and organic matter are mapped from the file layers by depth
+       ! (SoilStateType), so the layer thicknesses must be given explicitly.
+       if (soil_layer_thickness(1) <= 0._r8) then
+          call shr_sys_abort(' ERROR: nlevgrnd_user/nlevsoi_user require soil_layer_thickness'//&
+               errMsg(__FILE__, __LINE__))
+       end if
+       if (more_vertlayers) then
+          call shr_sys_abort(' ERROR: nlevgrnd_user/nlevsoi_user cannot be combined with more_vertlayers'//&
+               errMsg(__FILE__, __LINE__))
+       end if
+       if (masterproc) then
+          write(iulog,*) 'initVertical: user layer counts: nlevsoi = ', nlevsoi, ' nlevgrnd = ', nlevgrnd, &
+               ' (surface dataset has ', nlevsoifl, ' soil layers)'
+       end if
+    else if ( .not. more_vertlayers ) then
        !    Removed the requirement for nlevsoifl to match nlevsoi, but we make sure the
        ! number of input layers do not exceed the maximum allocated, to avoid segmentation
        ! violation errors.
@@ -137,7 +152,13 @@ contains
     ! --------------------------------------------------------------------
     ! Try to read soil information from the file.
     allocate (zsoi_in(nlevsoi))
-    call ncd_io(ncid=ncid, varname='ZSOI', flag='read', data=zsoi_in, dim1name=grlnd, readvar=readvar)
+    if (nlevsoi_user > 0 .or. nlevgrnd_user > 0) then
+       ! layer structure comes from soil_layer_thickness (below); the file ZSOI
+       ! has nlevsoifl /= nlevsoi levels and is not used here
+       readvar = .false.
+    else
+       call ncd_io(ncid=ncid, varname='ZSOI', flag='read', data=zsoi_in, dim1name=grlnd, readvar=readvar)
+    end if
     if ( readvar ) then
        ! -----------------------------------------------------------------
        !    File contains soil information. We must complete the soil depth information for
@@ -224,12 +245,13 @@ contains
     end if
 
     ! define a vertical grid spacing such that it is the normal dzsoi if nlevdecomp =nlevgrnd, or else 1 meter
+    ! NOTE: dzsoi_decomp is set directly from dzsoi so that the decomposition layers
+    ! are always identical to the soil layers. For the default (exponential or file
+    ! ZSOI) grids this is bit-for-bit with the previous node-midpoint formula; for
+    ! user-specified soil_layer_thickness the midpoint formula is inconsistent with
+    ! dzsoi (breaks C/N/P column integrals and the FATES dz_decomp == dz assumption).
     if (use_vertsoilc) then
-       dzsoi_decomp(1) = 0.5_r8*(zsoi(1)+zsoi(2))             !thickness b/n two interfaces
-       do j = 2,nlevgrnd-1
-          dzsoi_decomp(j)= 0.5_r8*(zsoi(j+1)-zsoi(j-1))
-       enddo
-       dzsoi_decomp(nlevgrnd) = zsoi(nlevgrnd)-zsoi(nlevgrnd-1)
+       dzsoi_decomp(1:nlevgrnd) = dzsoi(1:nlevgrnd)
     else
        dzsoi_decomp(1) = 1.
     end if

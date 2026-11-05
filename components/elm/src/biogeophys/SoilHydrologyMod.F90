@@ -1096,7 +1096,8 @@ contains
      use elm_varcon       , only : pondmx, tfrz, watmin,rpi, secspday, nlvic
      use column_varcon    , only : icol_roof, icol_road_imperv, icol_road_perv
      use elm_varctl       , only : use_var_soil_thick, use_firn_percolation_and_compaction
-     use elm_varctl       , only : use_subsurface_drainage
+     use elm_varctl       , only : use_subsurface_drainage, use_gw2river
+     use elm_varctl       , only : use_lateral_subsurface_flow, lateral_deep_zwt
      use SoilWaterMovementMod, only : zengdecker_2009_with_var_soil_thick
      use pftvarcon        , only : rsub_top_globalmax
      use LandunitType     , only : lun_pp
@@ -1467,6 +1468,9 @@ contains
              endif
              ! no topographic drainage (e.g. closed-domain tests with no-flow boundaries)
              if (.not. use_subsurface_drainage) rsub_top_max = 0._r8
+             ! ASAP groundwater-river exchange replaces SIMTOP drainage of soil and crop
+             ! columns (both jwt branches below then remove nothing)
+             if (use_gw2river .and. (col_pp%is_soil(c) .or. col_pp%is_crop(c))) rsub_top_max = 0._r8
              if (use_vichydro) then
                 ! ARNO model for the bottom soil layer (based on bottom soil layer
                 ! moisture from previous time step
@@ -1601,9 +1605,14 @@ contains
              end if! end of jwt if construct
 
              zwt(c) = max(0.0_r8,zwt(c))
-             zwt(c) = min(80._r8,zwt(c))
+             if (use_lateral_subsurface_flow .and. lateral_deep_zwt) then
+                ! deep columns: cap at the soil-column bottom instead of 80 m
+                zwt(c) = min(max(80._r8, zi(c,nlevbed)), zwt(c))
+             else
+                zwt(c) = min(80._r8,zwt(c))
+             end if
 
-          endif
+           endif
 
        end do
 
@@ -1628,8 +1637,12 @@ contains
                 end if
              enddo
              zwt(c) = max(0.0_r8,zwt(c))
-             zwt(c) = min(80._r8,zwt(c))
-          enddo
+             if (use_lateral_subsurface_flow .and. lateral_deep_zwt) then
+                zwt(c) = min(max(80._r8, zi(c,nlevbed)), zwt(c))
+             else
+                zwt(c) = min(80._r8,zwt(c))
+             end if
+           enddo
 
        endif
 
@@ -1739,6 +1752,10 @@ contains
           ! Sub-surface runoff and drainage
 
           qflx_drain(c) = qflx_rsub_sat(c) + rsub_top(c)
+
+          ! groundwater discharge to the river (removed from the soil column in
+          ! ApplySaturatedLateralFlux) goes to MOSART as subsurface runoff
+          if (use_gw2river) qflx_drain(c) = qflx_drain(c) + col_wf%qflx_gw2riv(c)
 
           ! Set imbalance for snow capping
 

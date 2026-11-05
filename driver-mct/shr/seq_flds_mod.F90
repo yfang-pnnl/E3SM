@@ -161,6 +161,7 @@ module seq_flds_mod
   logical            :: atm_gustiness       ! .true. if the atmosphere model produces gustiness
   logical            :: rof2ocn_nutrients   ! .true. if the runoff model passes nutrient fields to the ocn
   logical            :: lnd_rof_two_way     ! .true. if land-river two-way coupling turned on
+  logical            :: lnd_rof_gw_exchange ! .true. if land-river groundwater exchange (river seepage to the aquifer) is coupled
   logical            :: ocn_rof_two_way     ! .true. if river-ocean two-way coupling turned on
   logical            :: ocn_lnd_one_way     ! .true. if ocean to land one-way coupling turned on
   logical            :: rof_sed             ! .true. if river model includes sediment
@@ -418,6 +419,7 @@ contains
          glc_nec, glc_nzoc, ice_ncat, seq_flds_i2o_per_cat, flds_bgc_oi, &
          nan_check_component_fields, rof_heat, atm_flux_method, atm_gustiness, &
          rof2ocn_nutrients, lnd_rof_two_way, ocn_rof_two_way, ocn_lnd_one_way, rof_sed, &
+         lnd_rof_gw_exchange, &
          wav_ocn_coup, wav_atm_coup, wav_ice_coup, wav_nfreq, add_iac_to_cplstate
 
     ! user specified new fields
@@ -462,6 +464,7 @@ contains
        atm_gustiness = .false.
        rof2ocn_nutrients = .false.
        lnd_rof_two_way   = .false.
+       lnd_rof_gw_exchange = .false.
        ocn_rof_two_way   = .false.
        ocn_lnd_one_way   = .false.
        rof_sed   = .false.
@@ -504,6 +507,7 @@ contains
     call shr_mpi_bcast(atm_gustiness, mpicom)
     call shr_mpi_bcast(rof2ocn_nutrients, mpicom)
     call shr_mpi_bcast(lnd_rof_two_way,   mpicom)
+    call shr_mpi_bcast(lnd_rof_gw_exchange, mpicom)
     call shr_mpi_bcast(ocn_rof_two_way,   mpicom)
     call shr_mpi_bcast(ocn_lnd_one_way,   mpicom)
     call shr_mpi_bcast(rof_sed,   mpicom)
@@ -2485,6 +2489,18 @@ contains
       stdname  = 'floodplain_inundation_infiltration'
       units    = 'mm/s'
       attname  = 'inundinf'
+      call metadata_set(attname, longname, stdname, units)
+    endif
+
+    ! land-river groundwater exchange: river seepage to the aquifer (removed from the MOSART main channel)
+    if (lnd_rof_gw_exchange) then
+      call seq_flds_add(l2x_fluxes, 'Flrl_rivinf')
+      call seq_flds_add(x2r_fluxes, 'Flrl_rivinf')
+      call seq_flds_add(l2x_fluxes_to_rof,'Flrl_rivinf')
+      longname = 'River seepage to the aquifer'
+      stdname  = 'river_to_groundwater_seepage'
+      units    = 'mm/s'
+      attname  = 'Flrl_rivinf'
       call metadata_set(attname, longname, stdname, units)
     endif
 

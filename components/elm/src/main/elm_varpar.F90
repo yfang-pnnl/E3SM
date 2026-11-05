@@ -10,6 +10,7 @@ module elm_varpar
   use elm_varctl   , only: use_century_decomp, use_c13, use_c14, use_fates
   use elm_varctl   , only: iulog, create_crop_landunit, irrigate
   use elm_varctl   , only: use_vichydro
+  use elm_varctl   , only: nlevgrnd_user, nlevsoi_user
   use elm_varctl   , only: use_extrasnowlayers, iac_present
 
   !
@@ -222,6 +223,17 @@ contains
     else
        nlevsoi     =  8  + nlev_equalspace
        nlevgrnd    =  15 + nlev_equalspace
+    end if
+
+    ! Optional user-specified layer counts (namelist nlevgrnd_user, nlevsoi_user).
+    ! nlevsoi_user == nlevgrnd_user (no bedrock layers) is allowed.
+    if (nlevgrnd_user > 0) nlevgrnd = nlevgrnd_user
+    if (nlevsoi_user  > 0) nlevsoi  = nlevsoi_user
+    if (nlevgrnd_user > 0 .or. nlevsoi_user > 0) then
+       if (nlevsoi > nlevgrnd .or. nlevsoi < 2 .or. nlevgrnd < 2) then
+          write(iulog,*) subname//' ERROR: nlevsoi = ', nlevsoi, ' nlevgrnd = ', nlevgrnd
+          call shr_sys_abort(subname//' ERROR: need 2 <= nlevsoi <= nlevgrnd (nlevsoi_user, nlevgrnd_user)')
+       end if
     end if
 
     if (use_vichydro) then

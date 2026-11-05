@@ -84,6 +84,7 @@ module lnd2atmType
 
      real(r8), pointer :: qflx_rofmud_grc(:)       => null() ! grc sediment yield
      real(r8), pointer :: qflx_h2orof_drain_grc(:) => null() ! grc drainage from floodplain inundation
+     real(r8), pointer :: qflx_riv2gw_grc(:)       => null() ! grc river seepage to the aquifer (mm H2O/s)
      
    contains
 
@@ -183,6 +184,7 @@ contains
 
     allocate(this%qflx_rofmud_grc      (begg:endg)); this%qflx_rofmud_grc      (:) =ival
     allocate(this%qflx_h2orof_drain_grc(begg:endg)); this%qflx_h2orof_drain_grc(:) = ival
+    allocate(this%qflx_riv2gw_grc      (begg:endg)); this%qflx_riv2gw_grc      (:) = 0._r8
 
     if (shr_fan_to_atm) then
        if (.not. use_fan) then

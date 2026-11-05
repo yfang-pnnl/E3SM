@@ -119,6 +119,8 @@ module RunoffMod
      real(r8), pointer :: runoff(:,:)      ! coupler return mosart basin derived flow [m3/s]
      real(r8), pointer :: direct(:,:)      ! coupler return direct flow [m3/s]
      real(r8), pointer :: inundinf(:)      ! coupler return drainage from floodplain inundation  [mm/s]
+     real(r8), pointer :: rivinf(:)        ! river seepage to the aquifer, from the land [m3/s]
+     real(r8), pointer :: rivinf_short(:)  ! part of the seepage the main channel could not supply [m3/s]
 
      !    - history (currently needed)
      real(r8), pointer :: runofflnd_nt1(:)
@@ -615,6 +617,8 @@ contains
              rtmCTL%flood(begr:endr),             &
              rtmCTL%direct(begr:endr,nt_rtm),     &
              rtmCTL%inundinf(begr:endr),          &
+             rtmCTL%rivinf(begr:endr),            &
+             rtmCTL%rivinf_short(begr:endr),      &
              rtmCTL%wh(begr:endr,nt_rtm),         &
              rtmCTL%wt(begr:endr,nt_rtm),         &
              rtmCTL%wr(begr:endr,nt_rtm),         &
@@ -671,6 +675,8 @@ contains
     rtmCTL%flood(:)        = 0._r8
     rtmCTL%direct(:,:)     = 0._r8
     rtmCTL%inundinf(:)     = 0._r8
+    rtmCTL%rivinf(:)       = 0._r8
+    rtmCTL%rivinf_short(:) = 0._r8
     rtmCTL%inundwf(:)      = 0._r8
     rtmCTL%inundhf(:)      = 0._r8
     rtmCTL%inundff(:)      = 0._r8

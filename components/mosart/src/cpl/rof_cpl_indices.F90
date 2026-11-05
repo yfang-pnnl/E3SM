@@ -43,6 +43,7 @@ module rof_cpl_indices
   integer, public :: index_x2r_Faxa_swndf = 0   ! atm->rof shorwave near-ir diffus flux
   integer, public :: index_x2r_Flrl_rofmud = 0  ! lnd->rof input suspended sediment flux from soil erosion
   integer, public :: index_x2r_Flrl_inundinf = 0! lnd->rof infiltration from floodplain inundation
+  integer, public :: index_x2r_Flrl_rivinf = 0  ! lnd->rof river seepage to the aquifer
   integer, public :: nflds_x2r = 0
 
   integer, public :: index_x2r_coszen_str  = 0   ! lnd->rof Cosine of Zenith
@@ -100,7 +101,7 @@ contains
     !
     ! !USES:
     use seq_flds_mod  , only: seq_flds_r2x_fields, seq_flds_x2r_fields, rof_heat, &
-                              rof2ocn_nutrients, lnd_rof_two_way, ocn_rof_two_way, &
+                              rof2ocn_nutrients, lnd_rof_two_way, ocn_rof_two_way, lnd_rof_gw_exchange, &
                               rof_sed
     use mct_mod       , only: mct_aVect, mct_aVect_init, mct_avect_indexra, &
                               mct_aVect_clean, mct_avect_nRattr
@@ -150,6 +151,9 @@ contains
 	end if
     if (lnd_rof_two_way) then
       index_x2r_Flrl_inundinf =  mct_avect_indexra(avtmp,'Flrl_inundinf')
+    endif
+    if (lnd_rof_gw_exchange) then
+      index_x2r_Flrl_rivinf   =  mct_avect_indexra(avtmp,'Flrl_rivinf')
     endif
 
     nflds_x2r = mct_avect_nRattr(avtmp)

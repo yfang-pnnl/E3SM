@@ -8,6 +8,7 @@ module elm_instMod
   use decompMod                  , only : bounds_type, get_proc_bounds
   use elm_varctl                 , only : use_cn, use_voc, use_c13, use_c14, use_fates, use_betr
   use elm_varctl , only : iulog
+  use elm_varctl , only : use_zwt0_init
   !-----------------------------------------
   ! Definition of component types
   !-----------------------------------------
@@ -447,7 +448,8 @@ contains
          snow_depth_col(begc:endc),                &
          soilstate_vars%watsat_col(begc:endc, 1:), &
          sucsat_input=soilstate_vars%sucsat_col(begc:endc, 1:), &
-         bsw_input=soilstate_vars%bsw_col(begc:endc, 1:))
+         bsw_input=soilstate_vars%bsw_col(begc:endc, 1:), &
+         zwt0_input=soilstate_vars%zwt0_col(begc:endc))
     call veg_ws%Init(bounds_proc%begp_all, bounds_proc%endp_all)
 
     call waterflux_vars%init(bounds_proc)
@@ -477,6 +479,16 @@ contains
     call photosyns_vars%Init(bounds_proc)
 
     call soilhydrology_vars%Init(bounds_proc, nlfilename)
+
+    ! Optional per-column cold-start water table from the surface-data field ZWT0
+    ! (consistent with the hydrostatic soil moisture set in col_ws%Init)
+    if (use_zwt0_init) then
+       do c = begc, endc
+          if ((col_pp%is_soil(c) .or. col_pp%is_crop(c)) .and. soilstate_vars%zwt0_col(c) >= 0._r8) then
+             soilhydrology_vars%zwt_col(c) = soilstate_vars%zwt0_col(c)
+          end if
+       end do
+    end if
 
     call solarabs_vars%Init(bounds_proc)
 

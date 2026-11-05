@@ -70,7 +70,10 @@ module controlMod
                         use_hydrstress, domain_decomp_type, &
                         use_IM2_hillslope_hydrology, &
                         use_lateral_subsurface_flow, lateral_unsat_flow, &
-                        lateral_hk_anisotropy, lateral_theta_watertable, &
+                        lateral_hk_anisotropy, lateral_theta_watertable, lateral_deep_zwt, &
+                        nlevgrnd_user, nlevsoi_user, use_fdepth_decay, lateral_trans_method, &
+                        use_gw2river, gw2river_bed_thickness, gw2river_max_rate, use_zwt0_init, &
+                        use_lnd_rof_gw_exchange, &
                         soil_layer_thickness, hydrostatic_init_zwt, use_subsurface_drainage, &
                         do_budgets, budget_inst, budget_daily, budget_month, &
                         budget_ann, budget_ltann, budget_ltend, &
@@ -372,7 +375,12 @@ contains
 
     namelist /elm_inparm/ &
          use_lateral_subsurface_flow, lateral_unsat_flow, &
-         lateral_hk_anisotropy, lateral_theta_watertable
+         lateral_hk_anisotropy, lateral_theta_watertable, lateral_deep_zwt
+
+    ! ASAP-style groundwater options
+    namelist /elm_inparm/ &
+         nlevgrnd_user, nlevsoi_user, use_fdepth_decay, lateral_trans_method, &
+         use_gw2river, gw2river_bed_thickness, gw2river_max_rate, use_zwt0_init
 
     namelist /elm_inparm/ &
          soil_layer_thickness, hydrostatic_init_zwt, use_subsurface_drainage
@@ -647,6 +655,44 @@ contains
              call endrun(msg=' ERROR: lateral_hk_anisotropy must be positive.'//&
                   errMsg(__FILE__, __LINE__))
           end if
+       end if
+
+       ! ASAP-style groundwater options
+       if (trim(lateral_trans_method) /= 'elm' .and. trim(lateral_trans_method) /= 'asap') then
+          call endrun(msg=" ERROR: lateral_trans_method must be 'elm' or 'asap'."//&
+               errMsg(__FILE__, __LINE__))
+       end if
+       if (trim(lateral_trans_method) == 'asap' .and. .not. use_lateral_subsurface_flow) then
+          call endrun(msg=" ERROR: lateral_trans_method = 'asap' requires use_lateral_subsurface_flow."//&
+               errMsg(__FILE__, __LINE__))
+       end if
+       if (use_gw2river .and. .not. use_lateral_subsurface_flow) then
+          call endrun(msg=' ERROR: use_gw2river requires use_lateral_subsurface_flow.'//&
+               errMsg(__FILE__, __LINE__))
+       end if
+       if (use_gw2river .and. (gw2river_bed_thickness <= 0._r8 .or. gw2river_max_rate < 0._r8)) then
+          call endrun(msg=' ERROR: gw2river_bed_thickness must be > 0 and gw2river_max_rate >= 0.'//&
+               errMsg(__FILE__, __LINE__))
+       end if
+       if (use_lnd_rof_gw_exchange .and. .not. use_gw2river) then
+          call endrun(msg=' ERROR: the driver flag lnd_rof_gw_exchange requires use_gw2river in ELM.'//&
+               errMsg(__FILE__, __LINE__))
+       end if
+       if (use_lnd_rof_gw_exchange .and. lnd_rof_coupling_nstep < 1) then
+          call endrun(msg=' ERROR: lnd_rof_coupling_nstep cannot be smaller than 1.'//&
+               errMsg(__FILE__, __LINE__))
+       end if
+       if ((nlevgrnd_user > 0 .or. nlevsoi_user > 0) .and. soil_layer_thickness(1) <= 0._r8) then
+          call endrun(msg=' ERROR: nlevgrnd_user/nlevsoi_user require soil_layer_thickness.'//&
+               errMsg(__FILE__, __LINE__))
+       end if
+       if ((nlevgrnd_user > 0 .or. nlevsoi_user > 0) .and. use_vichydro) then
+          call endrun(msg=' ERROR: nlevgrnd_user/nlevsoi_user are not supported with VIC hydrology.'//&
+               errMsg(__FILE__, __LINE__))
+       end if
+       if (use_zwt0_init .and. hydrostatic_init_zwt < 0._r8) then
+          call endrun(msg=' ERROR: use_zwt0_init requires hydrostatic_init_zwt >= 0 (used where ZWT0 < 0).'//&
+               errMsg(__FILE__, __LINE__))
        end if
 
        if (use_lnd_rof_two_way) then
@@ -1014,6 +1060,17 @@ contains
     call mpi_bcast (lateral_unsat_flow, 1, MPI_LOGICAL, 0, mpicom, ier)
     call mpi_bcast (lateral_hk_anisotropy, 1, MPI_REAL8, 0, mpicom, ier)
     call mpi_bcast (lateral_theta_watertable, 1, MPI_LOGICAL, 0, mpicom, ier)
+    call mpi_bcast (lateral_deep_zwt, 1, MPI_LOGICAL, 0, mpicom, ier)
+
+    ! ASAP-style groundwater options
+    call mpi_bcast (nlevgrnd_user, 1, MPI_INTEGER, 0, mpicom, ier)
+    call mpi_bcast (nlevsoi_user, 1, MPI_INTEGER, 0, mpicom, ier)
+    call mpi_bcast (use_fdepth_decay, 1, MPI_LOGICAL, 0, mpicom, ier)
+    call mpi_bcast (lateral_trans_method, len(lateral_trans_method), MPI_CHARACTER, 0, mpicom, ier)
+    call mpi_bcast (use_gw2river, 1, MPI_LOGICAL, 0, mpicom, ier)
+    call mpi_bcast (gw2river_bed_thickness, 1, MPI_REAL8, 0, mpicom, ier)
+    call mpi_bcast (gw2river_max_rate, 1, MPI_REAL8, 0, mpicom, ier)
+    call mpi_bcast (use_zwt0_init, 1, MPI_LOGICAL, 0, mpicom, ier)
 
     ! soil layer structure and cold-start soil water
     call mpi_bcast (soil_layer_thickness, size(soil_layer_thickness), MPI_REAL8, 0, mpicom, ier)
@@ -1130,7 +1187,20 @@ contains
        write(iulog,*) '    lateral_unsat_flow = ', lateral_unsat_flow
        write(iulog,*) '    lateral_hk_anisotropy = ', lateral_hk_anisotropy
        write(iulog,*) '    lateral_theta_watertable = ', lateral_theta_watertable
+       write(iulog,*) '    lateral_deep_zwt = ', lateral_deep_zwt
+       write(iulog,*) '    lateral_trans_method = ', trim(lateral_trans_method)
+       write(iulog,*) '    use_gw2river = ', use_gw2river
+       if (use_gw2river) then
+          write(iulog,*) '    gw2river_bed_thickness = ', gw2river_bed_thickness
+          write(iulog,*) '    gw2river_max_rate = ', gw2river_max_rate
+          write(iulog,*) '    use_lnd_rof_gw_exchange = ', use_lnd_rof_gw_exchange
+       end if
     end if
+    write(iulog,*) '    use_fdepth_decay = ', use_fdepth_decay
+    if (nlevgrnd_user > 0 .or. nlevsoi_user > 0) then
+       write(iulog,*) '    nlevgrnd_user = ', nlevgrnd_user, ' nlevsoi_user = ', nlevsoi_user
+    end if
+    if (use_zwt0_init) write(iulog,*) '    use_zwt0_init = ', use_zwt0_init
     if (soil_layer_thickness(1) > 0._r8) then
        write(iulog,*) '    soil_layer_thickness = ', pack(soil_layer_thickness, soil_layer_thickness > 0._r8)
     end if

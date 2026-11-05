@@ -244,7 +244,8 @@ contains
       !------------------------------------------------------------------------------------
 
         call SoilWater(bounds, num_hydrologyc, filter_hydrologyc, num_urbanc, filter_urbanc, &
-            soilhydrology_vars, soilstate_vars, dtime)
+            soilhydrology_vars, soilstate_vars, dtime, &
+            volrmch_grc=atm2lnd_vars%volrmch_grc(bounds%begg:bounds%endg))
 
       !------------------------------------------------------------------------------------
       end if

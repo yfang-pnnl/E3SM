@@ -1533,6 +1533,11 @@ contains
        if (index_l2x_Flrl_inundinf /= 0) then
           l2x(index_l2x_Flrl_inundinf,i) = lnd2atm_vars%qflx_h2orof_drain_grc(g)
        endif
+
+       ! river seepage to the aquifer [mm/s, cell mean, positive river -> land]
+       if (index_l2x_Flrl_rivinf /= 0) then
+          l2x(index_l2x_Flrl_rivinf,i) = lnd2atm_vars%qflx_riv2gw_grc(g)
+       endif
        
        ! glc coupling
 

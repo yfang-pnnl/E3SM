@@ -1,4 +1,5 @@
 module SoilStateType
+  ! (LogColumnRange, at the end of this module, logs the global range of a column field)
 
   !------------------------------------------------------------------------------
   ! !USES:
@@ -22,6 +23,8 @@ module SoilStateType
   use elm_varctl      , only : use_erosion
   use elm_varctl      , only : use_var_soil_thick
   use elm_varctl      , only : iulog, fsurdat, hist_wrtch4diag
+  use elm_varctl      , only : nlevsoi_user, nlevgrnd_user, use_fdepth_decay, lateral_trans_method
+  use elm_varctl      , only : use_gw2river, use_zwt0_init
   use CH4varcon       , only : allowlakeprod
   use LandunitType    , only : lun_pp                
   use ColumnType      , only : col_pp                
@@ -49,6 +52,13 @@ module SoilStateType
 
      ! hydraulic properties
      real(r8), pointer :: hksat_col            (:,:) ! col hydraulic conductivity at saturation (mm H2O /s)
+     real(r8), pointer :: fdepth_col           (:)   ! col e-folding depth of soil properties below 1.5 m (FDEPTH) [m]
+     real(r8), pointer :: hksat_lat_ref_col    (:)   ! col undecayed hksat of the deepest layer with node <= 1.5 m [mm/s]
+     real(r8), pointer :: hksat_top_ref_col    (:)   ! col undecayed hksat of the top layer [mm/s]
+     real(r8), pointer :: riv_width_col        (:)   ! col river width of the grid cell (RIV_WIDTH) [m]
+     real(r8), pointer :: riv_length_col       (:)   ! col river length in the grid cell (RIV_LENGTH) [m]
+     real(r8), pointer :: riv_depth_col        (:)   ! col bankfull river depth (RIV_DEPTH) [m]
+     real(r8), pointer :: zwt0_col             (:)   ! col cold-start water table depth (ZWT0) [m]
      real(r8), pointer :: hksat_min_col        (:,:) ! col mineral hydraulic conductivity at saturation (hksat) (mm/s)
      real(r8), pointer :: hk_l_col             (:,:) ! col hydraulic conductivity (mm/s)
      real(r8), pointer :: smp_l_col            (:,:) ! col soil matric potential (mm)
@@ -157,6 +167,13 @@ contains
 
     allocate(this%hksat_col            (begc_all:endc_all,nlevgrnd))    ; this%hksat_col            (:,:) = spval
     allocate(this%hksat_min_col        (begc:endc,nlevgrnd))            ; this%hksat_min_col        (:,:) = spval
+    allocate(this%fdepth_col           (begc:endc))                     ; this%fdepth_col           (:)   = 100._r8
+    allocate(this%hksat_lat_ref_col    (begc:endc))                     ; this%hksat_lat_ref_col    (:)   = 0._r8
+    allocate(this%hksat_top_ref_col    (begc:endc))                     ; this%hksat_top_ref_col    (:)   = 0._r8
+    allocate(this%riv_width_col        (begc:endc))                     ; this%riv_width_col        (:)   = 0._r8
+    allocate(this%riv_length_col       (begc:endc))                     ; this%riv_length_col       (:)   = 0._r8
+    allocate(this%riv_depth_col        (begc:endc))                     ; this%riv_depth_col        (:)   = 0._r8
+    allocate(this%zwt0_col             (begc:endc))                     ; this%zwt0_col             (:)   = -1._r8
     allocate(this%hk_l_col             (begc:endc,nlevgrnd))            ; this%hk_l_col             (:,:) = spval
     allocate(this%smp_l_col            (begc_all:endc_all,nlevgrnd))    ; this%smp_l_col            (:,:) = spval
     allocate(this%smpmin_col           (begc:endc))                     ; this%smpmin_col           (:)   = spval
@@ -384,6 +401,9 @@ contains
     real(r8) ,pointer  :: litho_in (:,:)                ! read in - lithology erodibility index
     character(len=256) :: locfn                         ! local filename
     integer            :: nlevbed                       ! # of layers above bedrock
+    integer            :: jfl                           ! surface-file soil layer index
+    real(r8)           :: fdecay                        ! ASAP decay factor of soil properties below 1.5 m
+    real(r8) ,pointer  :: gfld (:)                      ! read in - grid cell field
     integer            :: ipedof
     integer            :: begc, endc
     integer            :: begg, endg
@@ -453,7 +473,7 @@ contains
     ! --------------------------------------------------------------------
     call ncd_inqdlen(ncid,dimid,nlevsoifl,name='nlevsoi')
     if ( .not. more_vertlayers )then
-       if ( nlevsoifl /= nlevsoi )then
+       if ( nlevsoifl /= nlevsoi .and. nlevsoi_user <= 0 .and. nlevgrnd_user <= 0 )then
           call endrun(msg=' ERROR: Number of soil layers on file does NOT match the number being used'//&
                errMsg(__FILE__, __LINE__))
        end if
@@ -594,6 +614,57 @@ contains
 
     ! Close file
 
+    ! ASAP-style groundwater fields (per grid cell)
+    if (use_fdepth_decay .or. trim(lateral_trans_method) == 'asap' .or. use_gw2river) then
+       allocate(gfld(bounds%begg:bounds%endg))
+       call ncd_io(ncid=ncid, varname='FDEPTH', flag='read', data=gfld, dim1name=grlnd, readvar=readvar)
+       if (.not. readvar) then
+          if (masterproc) write(iulog,*) 'FDEPTH not on surfdata file: using fdepth = 100 m'
+          gfld(:) = 100._r8
+       end if
+       do c = bounds%begc, bounds%endc
+          g = col_pp%gridcell(c)
+          this%fdepth_col(c) = gfld(g)
+          if (.not. (this%fdepth_col(c) > 0._r8)) this%fdepth_col(c) = 100._r8   ! missing or <= 0 (as ASAP)
+       end do
+       call LogColumnRange(bounds, 'FDEPTH [m]', this%fdepth_col(bounds%begc:bounds%endc))
+
+       if (use_gw2river) then
+          call ncd_io(ncid=ncid, varname='RIV_WIDTH', flag='read', data=gfld, dim1name=grlnd, readvar=readvar)
+          if (.not. readvar) call endrun(msg=' ERROR: RIV_WIDTH NOT on surfdata file (use_gw2river)'//errMsg(__FILE__, __LINE__))
+          do c = bounds%begc, bounds%endc
+             this%riv_width_col(c) = max(gfld(col_pp%gridcell(c)), 0._r8)
+          end do
+          call ncd_io(ncid=ncid, varname='RIV_LENGTH', flag='read', data=gfld, dim1name=grlnd, readvar=readvar)
+          if (.not. readvar) call endrun(msg=' ERROR: RIV_LENGTH NOT on surfdata file (use_gw2river)'//errMsg(__FILE__, __LINE__))
+          do c = bounds%begc, bounds%endc
+             this%riv_length_col(c) = max(gfld(col_pp%gridcell(c)), 0._r8)
+          end do
+          call ncd_io(ncid=ncid, varname='RIV_DEPTH', flag='read', data=gfld, dim1name=grlnd, readvar=readvar)
+          if (.not. readvar) call endrun(msg=' ERROR: RIV_DEPTH NOT on surfdata file (use_gw2river)'//errMsg(__FILE__, __LINE__))
+          do c = bounds%begc, bounds%endc
+             this%riv_depth_col(c) = max(gfld(col_pp%gridcell(c)), 0._r8)
+             ! a river needs a positive width, length and bankfull depth
+             if (this%riv_depth_col(c) <= 0._r8) this%riv_width_col(c) = 0._r8
+          end do
+          call LogColumnRange(bounds, 'RIV_WIDTH [m]' , this%riv_width_col (bounds%begc:bounds%endc))
+          call LogColumnRange(bounds, 'RIV_LENGTH [m]', this%riv_length_col(bounds%begc:bounds%endc))
+          call LogColumnRange(bounds, 'RIV_DEPTH [m]' , this%riv_depth_col (bounds%begc:bounds%endc))
+       end if
+       deallocate(gfld)
+    end if
+
+    if (use_zwt0_init) then
+       allocate(gfld(bounds%begg:bounds%endg))
+       call ncd_io(ncid=ncid, varname='ZWT0', flag='read', data=gfld, dim1name=grlnd, readvar=readvar)
+       if (.not. readvar) call endrun(msg=' ERROR: ZWT0 NOT on surfdata file (use_zwt0_init)'//errMsg(__FILE__, __LINE__))
+       do c = bounds%begc, bounds%endc
+          this%zwt0_col(c) = gfld(col_pp%gridcell(c))
+       end do
+       call LogColumnRange(bounds, 'ZWT0 [m]', this%zwt0_col(bounds%begc:bounds%endc))
+       deallocate(gfld)
+    end if
+
     call ncd_pio_closefile(ncid)
 
     ! --------------------------------------------------------------------
@@ -681,7 +752,26 @@ contains
           do lev = 1,nlevgrnd
              ! Number of soil layers in hydrologically active columns = NLEV2BED
 	     nlevbed = col_pp%nlevbed(c)
-             if ( more_vertlayers )then ! duplicate clay and sand values from last soil layer
+             if (nlevsoi_user > 0 .or. nlevgrnd_user > 0) then
+                ! user layer structure: take each layer's texture and organic matter
+                ! from the surface-file layer containing its node depth; layers
+                ! deeper than the file use the deepest file layer
+                jfl = nlevsoifl
+                do j = 1, nlevsoifl
+                   if (zsoi(lev) <= zisoifl(j)) then
+                      jfl = j
+                      exit
+                   end if
+                end do
+                clay   = clay3d(g,ti,jfl)
+                sand   = sand3d(g,ti,jfl)
+                gravel = grvl3d(g,ti,jfl)
+                if (lev <= nlevsoi) then
+                   om_frac = (organic3d(g,ti,jfl)/organic_max)**2._r8
+                else
+                   om_frac = 0._r8
+                end if
+             else if ( more_vertlayers )then ! duplicate clay and sand values from last soil layer
 
                 if (lev .eq. 1) then
                    clay = clay3d(g,ti,1)
@@ -781,6 +871,25 @@ contains
                    uncon_hksat = 0._r8
                 end if
                 this%hksat_col(c,lev)  = uncon_frac*uncon_hksat + (perc_frac*om_frac)*om_hksat
+
+                ! ASAP reference conductivities (undecayed): top layer, and the
+                ! deepest layer whose node is at or above 1.5 m
+                if (lev == 1) then
+                   this%hksat_top_ref_col(c) = this%hksat_col(c,lev)
+                   this%hksat_lat_ref_col(c) = this%hksat_col(c,lev)
+                else if (zsoi(lev) <= 1.5_r8) then
+                   this%hksat_lat_ref_col(c) = this%hksat_col(c,lev)
+                end if
+
+                ! ASAP (Miguez-Macho and Fan) decay of soil properties below 1.5 m
+                ! (module_rootdepth.f90, SOILFLUXES): applied before anything
+                ! derived from watsat/sucsat/hksat below
+                if (use_fdepth_decay .and. zsoi(lev) > 1.5_r8) then
+                   fdecay = max(min(exp((1.5_r8 - zsoi(lev))/this%fdepth_col(c)), 1._r8), 0.1_r8)
+                   this%hksat_col(c,lev)  = this%hksat_col(c,lev)  * fdecay
+                   this%watsat_col(c,lev) = this%watsat_col(c,lev) * fdecay
+                   this%sucsat_col(c,lev) = this%sucsat_col(c,lev) * min(1._r8/fdecay, 10._r8)
+                end if
 
                 this%tkmg_col(c,lev)   = tkm ** (1._r8- this%watsat_col(c,lev))
 
@@ -1062,6 +1171,29 @@ contains
 
 #endif
   !------------------------------------------------------------------------
+  subroutine LogColumnRange(bounds, name, fld)
+    !
+    ! !DESCRIPTION:
+    ! Write the global minimum and maximum of a column field to the log.
+    !
+    use shr_mpi_mod , only : shr_mpi_min, shr_mpi_max
+    !
+    type(bounds_type), intent(in) :: bounds
+    character(len=*) , intent(in) :: name
+    real(r8)         , intent(in) :: fld(bounds%begc:)
+    !
+    real(r8) :: lmin, lmax, gmin, gmax
+    !-----------------------------------------------------------------------
+    lmin =  huge(1._r8)
+    lmax = -huge(1._r8)
+    if (bounds%endc >= bounds%begc) then
+       lmin = minval(fld(bounds%begc:bounds%endc))
+       lmax = maxval(fld(bounds%begc:bounds%endc))
+    end if
+    call shr_mpi_min(lmin, gmin, mpicom, 'LogColumnRange', all=.false.)
+    call shr_mpi_max(lmax, gmax, mpicom, 'LogColumnRange', all=.false.)
+    if (masterproc) write(iulog,'(a,a,2es14.5)') 'SoilState: min/max of ', trim(name), gmin, gmax
 
+  end subroutine LogColumnRange
 
 end module SoilStateType

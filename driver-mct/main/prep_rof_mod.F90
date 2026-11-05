@@ -563,6 +563,8 @@ contains
 
     integer, save :: index_l2x_Flrl_inundinf
     integer, save :: index_x2r_Flrl_inundinf
+    integer, save :: index_l2x_Flrl_rivinf
+    integer, save :: index_x2r_Flrl_rivinf
     integer, save :: index_x2r_So_ssh
     integer, save :: index_o2x_So_ssh
     
@@ -741,6 +743,12 @@ contains
           mrgstr(index_x2r_Flrl_inundinf) = trim(mrgstr(index_x2r_Flrl_inundinf))//' = '//'l2x%Flrl_inundinf'
        endif
 
+       if (lnd_rof_gw_exchange) then
+          index_l2x_Flrl_rivinf = mct_aVect_indexRA(l2x_r,'Flrl_rivinf')
+          index_x2r_Flrl_rivinf = mct_aVect_indexRA(x2r_r,'Flrl_rivinf')
+          mrgstr(index_x2r_Flrl_rivinf) = trim(mrgstr(index_x2r_Flrl_rivinf))//' = '//'l2x%Flrl_rivinf'
+       endif
+
     end if
 
     do i = 1,lsize
@@ -774,6 +782,11 @@ contains
 
        if (lnd_rof_two_way) then
          x2r_r%rAttr(index_x2r_Flrl_inundinf,i) = l2x_r%rAttr(index_l2x_Flrl_inundinf,i)
+       endif
+
+       ! river seepage to the aquifer: per unit land area, scaled by the land fraction (as rofsub)
+       if (lnd_rof_gw_exchange) then
+         x2r_r%rAttr(index_x2r_Flrl_rivinf,i) = l2x_r%rAttr(index_l2x_Flrl_rivinf,i) * frac
        endif
 
     end do

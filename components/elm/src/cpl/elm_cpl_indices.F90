@@ -37,6 +37,7 @@ module elm_cpl_indices
   integer, public ::index_l2x_coszen_str      ! lnd->rtm cosine of zenith  
   integer, public ::index_l2x_Flrl_rofmud     ! lnd->rtm input sediment yield fluxes
   integer, public ::index_l2x_Flrl_inundinf   ! lnd->rtm infiltration from floodplain inundation
+  integer, public ::index_l2x_Flrl_rivinf = 0 ! lnd->rtm river seepage to the aquifer (groundwater-river exchange)
   integer, public ::index_l2x_Sl_t            ! temperature
   integer, public ::index_l2x_Sl_tref         ! 2m reference temperature
   integer, public ::index_l2x_Sl_qref         ! 2m reference specific humidity
@@ -162,7 +163,7 @@ contains
     !
     ! !USES:
     use seq_flds_mod   , only: seq_flds_x2l_fields, seq_flds_l2x_fields,       &
-                               lnd_rof_two_way, ocn_lnd_one_way, rof_sed
+                               lnd_rof_two_way, ocn_lnd_one_way, rof_sed, lnd_rof_gw_exchange
     use mct_mod        , only: mct_aVect, mct_aVect_init, mct_avect_indexra
     use mct_mod        , only: mct_aVect_clean, mct_avect_nRattr
     use seq_drydep_mod , only: drydep_fields_token, lnd_drydep
@@ -213,6 +214,9 @@ contains
 	end if
     if (lnd_rof_two_way) then
       index_l2x_Flrl_inundinf = mct_avect_indexra(l2x,'Flrl_inundinf')
+    endif
+    if (lnd_rof_gw_exchange) then
+      index_l2x_Flrl_rivinf   = mct_avect_indexra(l2x,'Flrl_rivinf')
     endif
     index_l2x_Sl_t          = mct_avect_indexra(l2x,'Sl_t')
     index_l2x_Sl_snowh      = mct_avect_indexra(l2x,'Sl_snowh')

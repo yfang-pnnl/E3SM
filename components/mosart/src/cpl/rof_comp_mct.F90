@@ -26,7 +26,7 @@ module rof_comp_mct
                                 nsrStartup, nsrContinue, nsrBranch, & 
                                 inst_index, inst_suffix, inst_name, RtmVarSet, &
                                 wrmflag, heatflag, data_bgc_fluxes_to_ocean_flag, &
-                                inundflag, use_lnd_rof_two_way, use_ocn_rof_two_way, &
+                                inundflag, use_lnd_rof_two_way, use_ocn_rof_two_way, use_lnd_rof_gw_exchange, &
                                 sediflag, redirect_negative_qgwl
   use RtmSpmd          , only : masterproc, mpicom_rof, npes, iam, RtmSpmdInit, ROFID
   use RtmMod           , only : Rtmini, Rtmrun
@@ -60,7 +60,7 @@ module rof_comp_mct
                                 index_x2r_coszen_str, &
                                 index_r2x_Flrr_supply, index_r2x_Flrr_deficit, &
                                 index_r2x_Sr_h2orof, index_r2x_Sr_frac_h2orof, &
-                                index_x2r_Flrl_inundinf
+                                index_x2r_Flrl_inundinf, index_x2r_Flrl_rivinf
 
   use mct_mod
   use ESMF
@@ -280,6 +280,7 @@ contains
                    hostname_in=hostname, username_in=username)
 
     use_lnd_rof_two_way = lnd_rof_two_way
+    use_lnd_rof_gw_exchange = lnd_rof_gw_exchange
     use_ocn_rof_two_way = ocn_rof_two_way
 
     ! Read namelist, grid and surface data
@@ -813,6 +814,11 @@ contains
 
        if (index_x2r_Flrl_inundinf > 0) then
           rtmCTL%inundinf(n) = x2r_r(index_x2r_Flrl_inundinf,n2) * (rtmCTL%area(n)*0.001_r8)
+       endif
+
+       ! river seepage to the aquifer, mm/s (cell mean) -> m3/s
+       if (index_x2r_Flrl_rivinf > 0) then
+          rtmCTL%rivinf(n) = x2r_r(index_x2r_Flrl_rivinf,n2) * (rtmCTL%area(n)*0.001_r8)
        endif
 
     enddo

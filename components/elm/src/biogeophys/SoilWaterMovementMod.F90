@@ -77,7 +77,7 @@ contains
 
   !-----------------------------------------------------------------------
   subroutine SoilWater(bounds, num_hydrologyc, filter_hydrologyc, &
-       num_urbanc, filter_urbanc, soilhydrology_vars, soilstate_vars, dt)
+       num_urbanc, filter_urbanc, soilhydrology_vars, soilstate_vars, dt, volrmch_grc)
     !
     ! DESCRIPTION
     ! select one subroutine to do the soil and root water coupling
@@ -104,6 +104,7 @@ contains
     type(soilhydrology_type) , intent(inout) :: soilhydrology_vars
     type(soilstate_type)     , intent(inout) :: soilstate_vars
     real(r8)                 , intent(in)    :: dt
+    real(r8)                 , intent(in), optional :: volrmch_grc(bounds%begg:) ! MOSART main-channel volume (m3), for use_gw2river
     !
     ! !LOCAL VARIABLES:
     !character(len=32)                        :: subname = 'SoilWater'       ! subroutine name
@@ -129,7 +130,7 @@ contains
     case (zengdecker_2009)
 
        call soilwater_zengdecker2009(bounds, num_hydrologyc, filter_hydrologyc, &
-            num_urbanc, filter_urbanc, soilhydrology_vars, soilstate_vars, dt)
+            num_urbanc, filter_urbanc, soilhydrology_vars, soilstate_vars, dt, volrmch_grc)
 
     case (vsfm)
     case default
@@ -184,7 +185,7 @@ contains
 
   !-----------------------------------------------------------------------
   subroutine soilwater_zengdecker2009(bounds, num_hydrologyc, filter_hydrologyc, &
-       num_urbanc, filter_urbanc, soilhydrology_vars, soilstate_vars, dtime)
+       num_urbanc, filter_urbanc, soilhydrology_vars, soilstate_vars, dtime, volrmch_grc)
     !
     ! !DESCRIPTION:
     ! Soil hydrology
@@ -265,7 +266,9 @@ contains
     use VegetationType       , only : veg_pp
     use ColumnType           , only : col_pp
     use elm_varctl           , only : use_lateral_subsurface_flow, lateral_theta_watertable
+    use elm_varctl           , only : use_gw2river
     use SoilLateralFlowMod   , only : ComputeLateralFlux, ApplySaturatedLateralFlux
+    use SoilLateralFlowMod   , only : ComputeRiverGWExchange
     !
     ! !ARGUMENTS:
     implicit none
@@ -277,6 +280,7 @@ contains
     type(soilhydrology_type), intent(inout) :: soilhydrology_vars
     type(soilstate_type)    , intent(inout) :: soilstate_vars
     real(r8), intent(in) :: dtime                                        ! land model time step (sec)
+    real(r8), intent(in), optional :: volrmch_grc(bounds%begg:)          ! MOSART main-channel volume (m3), for use_gw2river
 
     !
     ! !LOCAL VARIABLES:
@@ -421,7 +425,8 @@ contains
          ! compute vwc at water table depth (mainly for case when t < tfrz)
          !     this will only be used when zwt is below the soil column
          vwc_zwt(c) = watsat(c,nlevbed)
-         if(t_soisno(c,jwt(c)+1) < tfrz) then
+         ! (min() only matters when nlevbed = nlevgrnd, i.e. no layers below the soil column)
+         if(t_soisno(c,min(jwt(c)+1,nlevgrnd)) < tfrz) then
             vwc_zwt(c) = vwc_liq(c,nlevbed)
             do j = nlevbed,nlevgrnd
                if(zwt(c) <= zi(c,j)) then
@@ -573,6 +578,14 @@ contains
       if (use_lateral_subsurface_flow) then
          call ComputeLateralFlux(bounds, num_hydrologyc, filter_hydrologyc, &
               soilhydrology_vars, soilstate_vars, qflx_lat, qflx_lat_sat, zwt_lat)
+         ! groundwater-river exchange (ASAP GW2RIVER), added to the saturated source
+         if (use_gw2river) then
+            if (.not. present(volrmch_grc)) then
+               call endrun(msg='soilwater_zengdecker2009: use_gw2river needs volrmch_grc'//errMsg(__FILE__, __LINE__))
+            end if
+            call ComputeRiverGWExchange(bounds, num_hydrologyc, filter_hydrologyc, dtime, &
+                 soilhydrology_vars, soilstate_vars, zwt_lat, qflx_lat_sat, volrmch_grc)
+         end if
       end if
 
       ! Set up r, a, b, and c vectors for tridiagonal solution

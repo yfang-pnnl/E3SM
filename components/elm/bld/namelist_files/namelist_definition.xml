@@ -2089,6 +2089,14 @@ If TRUE (default), diagnose the water table depth from soil moisture when
 use_lateral_subsurface_flow is TRUE.
 </entry>
 
+<entry id="lateral_deep_zwt" type="logical" category="default_settings"
+       group="elm_inparm" valid_values="" value=".false." >
+If TRUE, and use_lateral_subsurface_flow is TRUE, the water table depth in
+Drainage is capped at the bottom of the soil column, max(80 m, zi(nlevbed)),
+instead of the legacy 80 m. Use for deep soil columns (e.g. ZWT0 deeper
+than 80 m). Default FALSE (legacy 80 m cap).
+</entry>
+
 <entry id="soil_layer_thickness" type="real(100)" category="elm_physics"
        group="elm_inparm" >
 Thickness (m) of each ground layer, from the surface down. If set, exactly
@@ -2112,6 +2120,73 @@ the height above the water table. Off (negative) by default.
 If TRUE (default), soil columns lose water through topographic (SIMTOP)
 subsurface drainage. Set to FALSE for closed-domain tests with no-flow
 boundaries.
+</entry>
+
+<entry id="nlevgrnd_user" type="integer" category="elm_physics"
+       group="elm_inparm" value="-1" >
+Number of ground layers (overrides the default nlevgrnd). Unused if &lt;= 0
+(default). Requires soil_layer_thickness with exactly nlevgrnd values. Soil
+texture and organic matter of each layer are taken from the surface-dataset
+layer containing its node depth (the deepest file layer below the file).
+</entry>
+
+<entry id="nlevsoi_user" type="integer" category="elm_physics"
+       group="elm_inparm" value="-1" >
+Number of hydrologically active soil layers (overrides nlevsoi, which is
+otherwise set by the nlevsoi dimension of the surface dataset). Unused if
+&lt;= 0 (default). Must be &lt;= nlevgrnd; nlevsoi_user = nlevgrnd_user (no
+bedrock layers) is allowed. With use_vertsoilc, nlevdecomp = nlevsoi, so the
+cost of the vertically resolved biogeochemistry grows with nlevsoi.
+</entry>
+
+<entry id="use_fdepth_decay" type="logical" category="elm_physics"
+       group="elm_inparm" valid_values="" value=".false." >
+If TRUE, decay hksat and watsat by f = max(min(exp((1.5-z)/fdepth),1),0.1)
+and scale sucsat by min(1/f,10) at layer nodes deeper than 1.5 m (Fan et al.,
+2007; ASAP SOILFLUXES). fdepth (m) is read from the surface-dataset field
+FDEPTH (100 m where missing or &lt;= 0). Default FALSE.
+</entry>
+
+<entry id="lateral_trans_method" type="char*16" category="elm_physics"
+       group="elm_inparm" valid_values="elm,asap" value="elm" >
+Saturated lateral transmissivity with use_lateral_subsurface_flow.
+'elm' (default): bottom-layer hksat times the saturated thickness in the soil
+column (Qiu et al., 2024). 'asap': ASAP LATERALFLOW4 (Fan et al., 2007),
+T = K*(fdepth+1.5-zwt) for zwt &lt;= 1.5 m and K*fdepth*exp((1.5-zwt)/fdepth)
+below, K = lateral_hk_anisotropy * hksat of the deepest layer with node
+&lt;= 1.5 m (undecayed), arithmetic mean between cells. Reads FDEPTH;
+use_fdepth_decay = .true. and lateral_unsat_flow = .false. are recommended.
+</entry>
+
+<entry id="use_gw2river" type="logical" category="elm_physics"
+       group="elm_inparm" valid_values="" value=".false." >
+If TRUE, exchange water between the aquifer and the river (ASAP GW2RIVER)
+and turn off SIMTOP drainage of soil and crop columns. Groundwater discharge
+(QGW2RIV) is added to QDRAI (subsurface runoff to MOSART). Requires
+use_lateral_subsurface_flow and the surface-dataset fields RIV_WIDTH,
+RIV_LENGTH and RIV_DEPTH (m). River seepage to the aquifer (QRIV2GW) also
+needs the driver flag lnd_rof_gw_exchange (river depth from MOSART); without
+it the exchange is drain-only. Default FALSE.
+</entry>
+
+<entry id="gw2river_bed_thickness" type="real" category="elm_physics"
+       group="elm_inparm" value="1.0" >
+River bed thickness (m) in the river-aquifer conductance
+width*length*hydcon/thickness (use_gw2river). Default 1 m (as ASAP).
+</entry>
+
+<entry id="gw2river_max_rate" type="real" category="elm_physics"
+       group="elm_inparm" value="5.787037037037037e-4" >
+Maximum groundwater-river exchange rate (mm/s) for use_gw2river.
+Default 50 mm/day (as ASAP).
+</entry>
+
+<entry id="use_zwt0_init" type="logical" category="elm_physics"
+       group="elm_inparm" valid_values="" value=".false." >
+If TRUE, a cold start sets the water table of soil and crop columns to the
+surface-dataset field ZWT0 (m) and soil moisture to hydrostatic equilibrium
+with it. Where ZWT0 &lt; 0, hydrostatic_init_zwt is used (must be &gt;= 0).
+Default FALSE.
 </entry>
 
 <!-- ========================================================================================  -->

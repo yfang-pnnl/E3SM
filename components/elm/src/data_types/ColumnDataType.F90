@@ -30,7 +30,7 @@ module ColumnDataType
   use elm_varctl      , only : pf_hmode, nu_com
   use elm_varctl      , only : use_extrasnowlayers, use_polygonal_tundra
   use elm_varctl      , only : use_fan
-  use elm_varctl      , only : use_lateral_subsurface_flow
+  use elm_varctl      , only : use_lateral_subsurface_flow, use_gw2river
   use elm_varctl      , only : use_ocn_lnd_one_way
   use ch4varcon       , only : allowlakeprod
   use pftvarcon       , only : VMAX_MINSURF_P_vr, KM_MINSURF_P_vr, pinit_beta1, pinit_beta2
@@ -525,6 +525,8 @@ module ColumnDataType
     real(r8), pointer :: qflx_lat_layer       (:,:) => null() ! lateral subsurface flux into each soil layer, from neighboring grid cells (mm H2O /s)
     real(r8), pointer :: qflx_lateral_unsat   (:)   => null() ! net lateral inflow in the unsaturated zone from neighboring grid cells (mm H2O /s)
     real(r8), pointer :: qflx_lateral_sat     (:)   => null() ! net lateral inflow in the saturated zone from neighboring grid cells (mm H2O /s)
+    real(r8), pointer :: qflx_gw2riv          (:)   => null() ! groundwater discharge to the river (>= 0, part of qflx_drain) (mm H2O /s)
+    real(r8), pointer :: qflx_riv2gw          (:)   => null() ! river seepage to the aquifer (>= 0) (mm H2O /s)
     real(r8), pointer :: qflx_lnd2ocn         (:)   => null() ! lateral flux between water table and sea surface height (mm H2O/s)
     real(r8), pointer :: snow_sources         (:)   => null() ! snow sources (mm H2O/s)
     real(r8), pointer :: snow_sinks           (:)   => null() ! snow sinks (mm H2O/s)
@@ -1390,9 +1392,9 @@ contains
   ! Subroutines to initialize and clean column water state data structure
   !------------------------------------------------------------------------
   subroutine col_ws_init(this, begc, endc, endc_owned, h2osno_input, snow_depth_input, watsat_input, &
-       sucsat_input, bsw_input)
+       sucsat_input, bsw_input, zwt0_input)
     !
-    use elm_varctl  , only : use_lake_wat_storage, use_arctic_init, hydrostatic_init_zwt
+    use elm_varctl  , only : use_lake_wat_storage, use_arctic_init, hydrostatic_init_zwt, use_zwt0_init
     ! !ARGUMENTS:
     class(column_water_state) :: this
     integer , intent(in)      :: begc,endc, endc_owned
@@ -1401,12 +1403,14 @@ contains
     real(r8), intent(in)      :: watsat_input(begc:, 1:)          ! volumetric soil water at saturation (porosity)
     real(r8), intent(in), optional :: sucsat_input(begc:, 1:)     ! saturated soil matric potential (mm); for hydrostatic_init_zwt
     real(r8), intent(in), optional :: bsw_input(begc:, 1:)        ! Clapp and Hornberger "b"; for hydrostatic_init_zwt
+    real(r8), intent(in), optional :: zwt0_input(begc:)           ! per-column cold-start water table (m); for use_zwt0_init
     !
     ! !LOCAL VARIABLES:
     real(r8), pointer  :: data2dptr(:,:), data1dptr(:) ! temp. pointers for slicing larger arrays
     real(r8)           :: snowbd      ! temporary calculation of snow bulk density (kg/m3)
     real(r8)           :: fmelt       ! snowbd/100
     real(r8)           :: suction     ! height above the water table for hydrostatic initialization (mm)
+    real(r8)           :: zwt_init    ! cold-start water table depth of the column (m); off if < 0
     integer            :: c,l,j,nlevs,nlevbed, ncells
     !------------------------------------------------------------------------
 
@@ -1767,8 +1771,12 @@ contains
                      this%frac_melted(c,j) = 0._r8
                    end if
                    ! hydrostatic equilibrium with a water table at hydrostatic_init_zwt (Clapp-Hornberger)
-                   if (hydrostatic_init_zwt >= 0._r8 .and. present(sucsat_input) .and. present(bsw_input)) then
-                      suction = (hydrostatic_init_zwt - col_pp%z(c,j))*1.e3_r8   ! height above the water table (mm)
+                   zwt_init = hydrostatic_init_zwt
+                   if (use_zwt0_init .and. present(zwt0_input)) then
+                      if (zwt0_input(c) >= 0._r8) zwt_init = zwt0_input(c)
+                   end if
+                   if (zwt_init >= 0._r8 .and. present(sucsat_input) .and. present(bsw_input)) then
+                      suction = (zwt_init - col_pp%z(c,j))*1.e3_r8   ! height above the water table (mm)
                       if (suction <= sucsat_input(c,j)) then
                          this%h2osoi_vol(c,j) = watsat_input(c,j)
                       else
@@ -5867,6 +5875,8 @@ contains
     allocate(this%qflx_lat_layer         (begc:endc,1:nlevgrnd))  ; this%qflx_lat_layer       (:,:) = 0._r8
     allocate(this%qflx_lateral_unsat     (begc:endc))             ; this%qflx_lateral_unsat   (:)   = 0._r8
     allocate(this%qflx_lateral_sat       (begc:endc))             ; this%qflx_lateral_sat     (:)   = 0._r8
+    allocate(this%qflx_gw2riv            (begc:endc))             ; this%qflx_gw2riv          (:)   = 0._r8
+    allocate(this%qflx_riv2gw            (begc:endc))             ; this%qflx_riv2gw          (:)   = 0._r8
     allocate(this%qflx_lnd2ocn           (begc:endc))             ; this%qflx_lnd2ocn         (:)   = spval
     allocate(this%snow_sources           (begc:endc))             ; this%snow_sources         (:)   = spval
     allocate(this%snow_sinks             (begc:endc))             ; this%snow_sinks           (:)   = spval
@@ -5946,6 +5956,16 @@ contains
        call hist_addfld1d (fname='QLATSAT',  units='mm/s',  &
             avgflag='A', long_name='net lateral subsurface inflow in the saturated zone', &
             ptr_col=this%qflx_lateral_sat, l2g_scale_type='veg')
+    end if
+
+    if (use_gw2river) then
+       call hist_addfld1d (fname='QGW2RIV',  units='mm/s',  &
+            avgflag='A', long_name='groundwater discharge to the river (part of QDRAI)', &
+            ptr_col=this%qflx_gw2riv, l2g_scale_type='veg')
+
+       call hist_addfld1d (fname='QRIV2GW',  units='mm/s',  &
+            avgflag='A', long_name='river seepage to the aquifer', &
+            ptr_col=this%qflx_riv2gw, l2g_scale_type='veg')
     end if
 
     if (use_ocn_lnd_one_way) then

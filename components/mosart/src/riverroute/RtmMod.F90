@@ -22,7 +22,8 @@ module RtmMod
                                nsrContinue, nsrBranch, nsrStartup, nsrest, &
                                inst_index, inst_suffix, inst_name, wrmflag, inundflag, &
                                smat_option, decomp_option, barrier_timers, heatflag, sediflag, do_budget, &
-                               isgrid2d, data_bgc_fluxes_to_ocean_flag, use_lnd_rof_two_way, use_ocn_rof_two_way
+                               isgrid2d, data_bgc_fluxes_to_ocean_flag, use_lnd_rof_two_way, use_ocn_rof_two_way, &
+                               use_lnd_rof_gw_exchange
   use RtmFileUtils    , only : getfil, getavu, relavu
   use RtmTimeManager  , only : timemgr_init, get_nstep, get_curr_date, advance_timestep
   use RtmTimeManager  , only : get_curr_date, is_end_curr_day, is_end_curr_month, is_first_step, is_first_restart_step, is_last_step
@@ -492,6 +493,7 @@ contains
        write(iulog,*) '   sediflag              = ',sediflag
        write(iulog,*) '   do_budget             = ',do_budget
        write(iulog,*) '   use_lnd_rof_two_way   = ',use_lnd_rof_two_way
+       write(iulog,*) '   use_lnd_rof_gw_exchange = ',use_lnd_rof_gw_exchange
        write(iulog,*) '   heatflag              = ',heatflag
        write(iulog,*) '   barrier_timers        = ',barrier_timers
        write(iulog,*) '   RoutingMethod         = ',Tctl%RoutingMethod
@@ -2160,6 +2162,7 @@ contains
     integer,parameter :: br_qgwl   = 22 ! input qgwl
     integer,parameter :: br_qdto   = 23 ! input qdto
     integer,parameter :: br_qdem   = 24 ! input qdem
+    integer,parameter :: br_rivinf = 25 ! output: river seepage to the aquifer (land groundwater exchange)
 
     ! Output TERMS (rates m3/s or volumes m3)
     integer,parameter :: br_ocnout = 40 ! runoff output to ocean
@@ -2232,6 +2235,8 @@ contains
 ! parameters used in negative runoff partitioning algorithm
     real(r8) :: river_volume_minimum        ! gridcell area multiplied by average river_depth_minimum [m3]
     real(r8) :: qgwl_volume                 ! volume of runoff during time step [m3]
+    real(r8) :: rivinf_vol, rivinf_take     ! river seepage to the land: requested and taken from wr [m3]
+    real(r8) :: rivinf_glob(2)              ! global seepage and shortfall [m3]
 !scs
 
     ! Variables for negative runoff redirection
@@ -2502,6 +2507,37 @@ contains
        TRunoff%qdem(nr,nt) = rtmCTL%qdem(nr,nt)
     enddo
     enddo
+
+    !-----------------------------------
+    ! Land groundwater-river exchange: remove the river seepage to the aquifer
+    ! (rtmCTL%rivinf, m3/s, taken up by the land over the last coupling period)
+    ! from the main channel. If the channel cannot supply it, the shortfall is
+    ! taken from this cell's subsurface inflow; a resulting negative qsub is sent
+    ! to the outlet by the negative-runoff handling below, so water is conserved
+    ! globally. Budget: output term br_rivinf.
+    !-----------------------------------
+    if (use_lnd_rof_gw_exchange) then
+       nt = nt_nliq
+       do nr = rtmCTL%begr,rtmCTL%endr
+          rtmCTL%rivinf_short(nr) = 0._r8
+          if (rtmCTL%rivinf(nr) <= 0._r8) cycle
+          rivinf_vol  = rtmCTL%rivinf(nr)*delt_coupling                 ! [m3]
+          rivinf_take = min(rivinf_vol, max(TRunoff%wr(nr,nt), 0._r8))
+          TRunoff%wr(nr,nt) = TRunoff%wr(nr,nt) - rivinf_take
+          call updatestate_mainchannel(nr, nt)
+          rtmCTL%rivinf_short(nr) = (rivinf_vol - rivinf_take)/delt_coupling
+          TRunoff%qsub(nr,nt) = TRunoff%qsub(nr,nt) - rtmCTL%rivinf_short(nr)
+          budget_terms(br_rivinf,nt) = budget_terms(br_rivinf,nt) + rivinf_vol
+       enddo
+       if (do_budget == 3) then
+          sum1 = sum(rtmCTL%rivinf(rtmCTL%begr:rtmCTL%endr))*delt_coupling
+          sum2 = sum(rtmCTL%rivinf_short(rtmCTL%begr:rtmCTL%endr))*delt_coupling
+          call shr_mpi_sum(sum1, rivinf_glob(1), mpicom_rof, 'mosart rivinf', all=.false.)
+          call shr_mpi_sum(sum2, rivinf_glob(2), mpicom_rof, 'mosart rivinf short', all=.false.)
+          if (masterproc) write(iulog,'(2a,2es14.5)') trim(subname), &
+               ' river seepage to land, total and shortfall taken from qsub (m3) = ', rivinf_glob(1), rivinf_glob(2)
+       endif
+    endif
   
     !-----------------------------------
     ! Compute flood
@@ -3368,7 +3404,7 @@ contains
                            budget_terms(br_erexch,nt) !+ &
                            ! budget_terms(br_qdem,nt) commented out by Tian 3/13/2018
           budget_output =  budget_terms(br_ocnout,nt) + budget_terms(br_flood,nt) + &
-                           budget_terms(br_direct,nt) + &
+                           budget_terms(br_direct,nt) + budget_terms(br_rivinf,nt) + &
                            budget_terms(bv_dsupp_f,nt) - budget_terms(bv_dsupp_i,nt)
           budget_accum(nt) = budget_accum(nt) + budget_volume - budget_input + budget_output     ! (Accumulate the water balance errors. 
                                                                                                  ! 'budget_volume - budget_input + budget_output' should not be zero. 
@@ -3409,7 +3445,7 @@ contains
                              budget_global(br_erexch,nt) !+ &
                              ! budget_global(br_qdem,nt)) commented out by Tian 3/13/2018
             budget_output = (budget_global(br_ocnout,nt) + budget_global(br_flood,nt) + &
-                             budget_global(br_direct,nt) + &
+                             budget_global(br_direct,nt) + budget_global(br_rivinf,nt) + &
                              budget_global(bv_dsupp_f,nt) - budget_global(bv_dsupp_i,nt))
             ! erout lag, need to remove current term and add in previous term, current term used in next timestep
             budget_other  = budget_global(br_erolpn,nt) - budget_global(br_erolcn,nt) + &   !('previous MOSART sub-step channel outflow volume'-'current MOSART sub-step channel outflow volume'. --Inund.)
@@ -3494,6 +3530,9 @@ contains
             write(iulog,'(2a)') trim(subname),'----------------'
             write(iulog,'(2a,i4,f22.6  )') trim(subname),'   output runoff = ',nt,budget_global(br_ocnout,nt)   !(Outflows to oceans. --Inund.)
             write(iulog,'(2a,i4,f22.6  )') trim(subname),'   output direct = ',nt,budget_global(br_direct,nt)   !(Direct flows to oceans. --Inund.)
+            if (use_lnd_rof_gw_exchange) then
+               write(iulog,'(2a,i4,f22.6  )') trim(subname),'   output rivinf = ',nt,budget_global(br_rivinf,nt)   ! river seepage to the land aquifer
+            end if
             write(iulog,'(2a,i4,f22.6  )') trim(subname),'   output flood  = ',nt,budget_global(br_flood,nt)    !(Former flood to land. --Inund.)
             write(iulog,'(2a,i4,f22.6  )') trim(subname),'   output supply = ',nt,budget_global(bv_dsupp_f,nt)-budget_global(bv_dsupp_i,nt)
             write(iulog,'(2a,i4,f22.6  )') trim(subname),' * output total  = ',nt,budget_output
@@ -3501,7 +3540,7 @@ contains
            if (do_budget == 3) then
             write(iulog,'(2a,i4,f22.6,a)') trim(subname),' x output check  = ',nt,budget_output - &
                                                                              (budget_global(br_ocnout,nt) + budget_global(br_direct,nt) + &
-                                                                              budget_global(br_flood,nt) + &
+                                                                              budget_global(br_flood,nt) + budget_global(br_rivinf,nt) + &
                                                                               budget_global(bv_dsupp_f,nt)-budget_global(bv_dsupp_i,nt)), &
                                                                              ' (should be zero)'
            endif
